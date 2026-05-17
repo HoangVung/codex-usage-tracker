@@ -76,6 +76,9 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Subagent type" in dashboard
     assert "Auto-review" in dashboard
     assert "Load context" in dashboard
+    assert 'data-sort-key="time"' in dashboard
+    assert 'data-sort-key="thread"' in dashboard
+    assert '<option value="time" selected>Newest calls</option>' in dashboard
 
 
 def test_context_loads_raw_log_only_on_demand(tmp_path: Path) -> None:

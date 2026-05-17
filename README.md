@@ -46,7 +46,7 @@ codex-usage-tracker dashboard --open
 codex-usage-tracker open-dashboard
 ```
 
-The dashboard opens in the flat Calls view. Use the Calls/Threads toggle to group filtered usage by thread, then click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are attached to that parent thread. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
+The dashboard opens in the flat Calls view sorted newest-first. Use the Calls/Threads toggle to group filtered usage by thread, with the most recently active thread at the top by default. Click a column header such as Time, Thread, Model, Effort, Tokens, Cost, Cache, or Signals to sort that view; clicking the same header toggles direction. Click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are attached to that parent thread. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
 
 Serve the dashboard with lazy raw-context loading:
 

@@ -132,6 +132,33 @@ def _html(payload: str) -> str:
     button {{
       font: inherit;
     }}
+    .sort-header {{
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      max-width: 100%;
+      min-height: 24px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: inherit;
+      font-size: inherit;
+      font-weight: 760;
+      cursor: pointer;
+    }}
+    th.num .sort-header {{
+      width: 100%;
+      justify-content: flex-end;
+    }}
+    th[data-sort-active="true"] .sort-header {{
+      color: var(--ink);
+    }}
+    .sort-indicator {{
+      display: inline-block;
+      min-width: 12px;
+      color: var(--blue);
+      font-size: 11px;
+    }}
     .table-tools {{
       display: flex;
       justify-content: space-between;
@@ -347,7 +374,7 @@ def _html(payload: str) -> str:
       <label>Model<select id="model"><option value="">All models</option></select></label>
       <label>Reasoning<select id="effort"><option value="">All efforts</option></select></label>
       <label>Pricing<select id="pricingStatus"><option value="">All pricing</option><option value="official">Official/configured</option><option value="estimated">Estimated</option><option value="unpriced">Unpriced</option></select></label>
-      <label>Sort<select id="sort"><option value="total">Most tokens</option><option value="cost">Highest estimated cost</option><option value="time">Newest calls</option><option value="cache">Lowest cache ratio</option><option value="context">Highest context use</option></select></label>
+      <label>Sort<select id="sort"><option value="time" selected>Newest calls</option><option value="thread">Thread name</option><option value="model">Model</option><option value="effort">Reasoning</option><option value="total">Most tokens</option><option value="cost">Highest estimated cost</option><option value="cache">Lowest cache ratio</option><option value="signals">Most signals</option><option value="context">Highest context use</option></select></label>
     </div>
     <div class="cards">
       <div class="card"><span>Visible Calls</span><strong id="visibleCalls">0</strong></div>
@@ -372,7 +399,14 @@ def _html(payload: str) -> str:
         <table>
           <thead>
             <tr>
-              <th>Time</th><th>Thread</th><th>Model</th><th>Effort</th><th class="num">Last Call</th><th class="num">Cost</th><th class="num">Cache</th><th class="num">Signals</th>
+              <th data-sort-header="time"><button class="sort-header" type="button" data-sort-key="time">Time <span class="sort-indicator" data-sort-indicator="time"></span></button></th>
+              <th data-sort-header="thread"><button class="sort-header" type="button" data-sort-key="thread">Thread <span class="sort-indicator" data-sort-indicator="thread"></span></button></th>
+              <th data-sort-header="model"><button class="sort-header" type="button" data-sort-key="model">Model <span class="sort-indicator" data-sort-indicator="model"></span></button></th>
+              <th data-sort-header="effort"><button class="sort-header" type="button" data-sort-key="effort">Effort <span class="sort-indicator" data-sort-indicator="effort"></span></button></th>
+              <th class="num" data-sort-header="total"><button class="sort-header" type="button" data-sort-key="total">Tokens <span class="sort-indicator" data-sort-indicator="total"></span></button></th>
+              <th class="num" data-sort-header="cost"><button class="sort-header" type="button" data-sort-key="cost">Cost <span class="sort-indicator" data-sort-indicator="cost"></span></button></th>
+              <th class="num" data-sort-header="cache"><button class="sort-header" type="button" data-sort-key="cache">Cache <span class="sort-indicator" data-sort-indicator="cache"></span></button></th>
+              <th class="num" data-sort-header="signals"><button class="sort-header" type="button" data-sort-key="signals">Signals <span class="sort-indicator" data-sort-indicator="signals"></span></button></th>
             </tr>
           </thead>
           <tbody id="rows"></tbody>
@@ -407,6 +441,8 @@ def _html(payload: str) -> str:
     const threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
     const expandedThreads = new Set();
     let activeView = 'calls';
+    let sortKey = sortEl.value || 'time';
+    let sortDirection = defaultSortDirection(sortKey);
     const money = (value, missingLabel = 'No price') => {{
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -426,6 +462,67 @@ def _html(payload: str) -> str:
       const text = short(value, '');
       return text.length > size ? `${{text.slice(0, size - 1)}}…` : text;
     }};
+    function defaultSortDirection(key) {{
+      return {{
+        cache: 'asc',
+        effort: 'asc',
+        model: 'asc',
+        thread: 'asc',
+      }}[key] || 'desc';
+    }}
+    function textValue(value) {{
+      return short(value, '').toLowerCase();
+    }}
+    function compareValues(left, right) {{
+      if (typeof left === 'number' || typeof right === 'number') {{
+        return (Number(left) || 0) - (Number(right) || 0);
+      }}
+      return String(left || '').localeCompare(String(right || ''));
+    }}
+    function directional(compareResult) {{
+      return sortDirection === 'asc' ? compareResult : -compareResult;
+    }}
+    function sortLabel(key) {{
+      return {{
+        cache: 'Cache',
+        context: 'Context use',
+        cost: 'Cost',
+        effort: 'Effort',
+        model: 'Model',
+        signals: 'Signals',
+        thread: 'Thread',
+        time: 'Time',
+        total: 'Tokens',
+      }}[key] || 'Sort';
+    }}
+    function setSort(key, direction = null) {{
+      sortKey = key;
+      sortDirection = direction || defaultSortDirection(key);
+      sortEl.value = key;
+      render();
+    }}
+    function handleHeaderSort(key) {{
+      if (sortKey === key) {{
+        sortDirection = sortDirection === 'asc' ? 'desc' : 'asc';
+      }} else {{
+        sortKey = key;
+        sortDirection = defaultSortDirection(key);
+      }}
+      sortEl.value = key;
+      render();
+    }}
+    function updateSortControls() {{
+      sortEl.value = sortKey;
+      document.querySelectorAll('[data-sort-header]').forEach(header => {{
+        const active = header.dataset.sortHeader === sortKey;
+        header.dataset.sortActive = active ? 'true' : 'false';
+        header.setAttribute('aria-sort', active ? (sortDirection === 'asc' ? 'ascending' : 'descending') : 'none');
+      }});
+      document.querySelectorAll('[data-sort-indicator]').forEach(indicator => {{
+        indicator.textContent = indicator.dataset.sortIndicator === sortKey ? (sortDirection === 'asc' ? '▲' : '▼') : '';
+      }});
+      tableCaptionEl.dataset.sortDescription = `${{sortLabel(sortKey)}} ${{sortDirection === 'asc' ? 'ascending' : 'descending'}}`;
+    }}
     function optionize(select, values) {{
       [...new Set(values.filter(Boolean))].sort().forEach(value => {{
         const option = document.createElement('option');
@@ -469,14 +566,26 @@ def _html(payload: str) -> str:
           || (pricingStatus === 'unpriced' && !row.pricing_model);
         return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches;
       }});
-      rows.sort((a, b) => {{
-        if (sortEl.value === 'cost') return Number(b.estimated_cost_usd || 0) - Number(a.estimated_cost_usd || 0);
-        if (sortEl.value === 'time') return String(b.event_timestamp).localeCompare(String(a.event_timestamp));
-        if (sortEl.value === 'cache') return Number(a.cache_ratio || 0) - Number(b.cache_ratio || 0);
-        if (sortEl.value === 'context') return Number(b.context_window_percent || 0) - Number(a.context_window_percent || 0);
-        return Number(b.total_tokens || 0) - Number(a.total_tokens || 0);
-      }});
+      rows.sort(compareCalls);
       return rows;
+    }}
+    function callSortValue(row, key) {{
+      if (key === 'cache') return Number(row.cache_ratio || 0);
+      if (key === 'context') return Number(row.context_window_percent || 0);
+      if (key === 'cost') return Number(row.estimated_cost_usd || 0);
+      if (key === 'effort') return textValue(row.effort);
+      if (key === 'model') return textValue(row.model);
+      if (key === 'signals') return Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0;
+      if (key === 'thread') return textValue(rowThreadLabel(row));
+      if (key === 'time') return String(row.event_timestamp || '');
+      return Number(row.total_tokens || 0);
+    }}
+    function compareCalls(a, b) {{
+      const primary = directional(compareValues(callSortValue(a, sortKey), callSortValue(b, sortKey)));
+      if (primary !== 0) return primary;
+      const timeFallback = String(b.event_timestamp || '').localeCompare(String(a.event_timestamp || ''));
+      if (timeFallback !== 0) return timeFallback;
+      return String(a.record_id || '').localeCompare(String(b.record_id || ''));
     }}
     function buildParentCandidates(rows) {{
       const bySession = new Map();
@@ -591,14 +700,32 @@ def _html(payload: str) -> str:
       return Number(a.cumulative_total_tokens || 0) - Number(b.cumulative_total_tokens || 0);
     }}
     function sortThreads(groups) {{
-      groups.sort((a, b) => {{
-        if (sortEl.value === 'cost') return b.estimatedCost - a.estimatedCost;
-        if (sortEl.value === 'time') return String(b.latestActivity).localeCompare(String(a.latestActivity));
-        if (sortEl.value === 'cache') return a.cacheRatio - b.cacheRatio;
-        if (sortEl.value === 'context') return b.maxContextUse - a.maxContextUse;
-        return b.totalTokens - a.totalTokens;
-      }});
+      groups.sort(compareThreads);
       return groups;
+    }}
+    function threadSortValue(group, key) {{
+      if (key === 'cache') return group.cacheRatio;
+      if (key === 'context') return group.maxContextUse;
+      if (key === 'cost') return group.estimatedCost;
+      if (key === 'effort') return textValue(group.effortSummary);
+      if (key === 'model') return textValue(group.modelSummary);
+      if (key === 'signals') return group.signalCount;
+      if (key === 'thread') return textValue(group.label);
+      if (key === 'time') return String(group.latestActivity || '');
+      return group.totalTokens;
+    }}
+    function compareThreads(a, b) {{
+      const primary = directional(compareValues(threadSortValue(a, sortKey), threadSortValue(b, sortKey)));
+      if (primary !== 0) return primary;
+      const timeFallback = String(b.latestActivity || '').localeCompare(String(a.latestActivity || ''));
+      if (timeFallback !== 0) return timeFallback;
+      return String(a.label || '').localeCompare(String(b.label || ''));
+    }}
+    function compactListSummary(values, fallback = 'Mixed') {{
+      const unique = [...new Set(values.filter(Boolean))].sort();
+      if (!unique.length) return 'Unknown';
+      if (unique.length === 1) return unique[0];
+      return `${{unique[0]}} +${{unique.length - 1}} ${{fallback.toLowerCase()}}`;
     }}
     function pricingStatusFor(rows) {{
       const priced = rows.filter(row => row.pricing_model);
@@ -630,12 +757,16 @@ def _html(payload: str) -> str:
         const subagentCount = calls.filter(isSubagent).length;
         const autoReviewCount = calls.filter(isAutoReview).length;
         const attachedCount = calls.filter(row => rowAttachment(row).relation !== 'direct' && rowAttachment(row).relation !== 'session').length;
+        const modelSummary = compactListSummary(calls.map(row => row.model), 'models');
+        const effortSummary = compactListSummary(calls.map(row => row.effort), 'efforts');
         return {{
           key: group.key,
           label: group.label,
           calls,
           callCount: calls.length,
           latestActivity,
+          modelSummary,
+          effortSummary,
           totalTokens,
           estimatedCost,
           cacheRatio: inputTokens ? cachedTokens / inputTokens : 0,
@@ -651,6 +782,7 @@ def _html(payload: str) -> str:
     function render() {{
       const rows = filtered();
       rowsEl.textContent = '';
+      updateSortControls();
       document.getElementById('visibleCalls').textContent = number.format(rows.length);
       document.getElementById('totalTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0));
       document.getElementById('cachedTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0));
@@ -674,7 +806,7 @@ def _html(payload: str) -> str:
     }}
     function renderCalls(rows) {{
       tableTitleEl.textContent = 'Model Calls';
-      tableCaptionEl.textContent = 'Showing individual model calls.';
+      tableCaptionEl.textContent = `Showing individual model calls sorted by ${{tableCaptionEl.dataset.sortDescription}}.`;
       for (const row of rows.slice(0, 500)) {{
         const tr = document.createElement('tr');
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
@@ -698,7 +830,7 @@ def _html(payload: str) -> str:
     function renderThreads(rows) {{
       const groups = groupThreads(rows);
       tableTitleEl.textContent = 'Threads';
-      tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls. Click a thread to expand its calls.`;
+      tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls, sorted by ${{tableCaptionEl.dataset.sortDescription}}. Click a thread to expand its calls.`;
       for (const group of groups.slice(0, 500)) {{
         const tr = document.createElement('tr');
         const expanded = expandedThreads.has(group.key);
@@ -722,8 +854,8 @@ def _html(payload: str) -> str:
               </span>
             </div>
           </td>
-          <td><span class="pill">Thread</span></td>
-          <td>${{escapeHtml(group.pricingStatus)}}</td>
+          <td><span class="pill">${{escapeHtml(truncate(group.modelSummary, 28))}}</span></td>
+          <td>${{escapeHtml(truncate(group.effortSummary, 28))}}</td>
           <td class="num">${{number.format(group.totalTokens)}}</td>
           <td class="num">${{pricingConfigured ? money(group.estimatedCost) : 'Not configured'}}</td>
           <td class="num">${{pct(group.cacheRatio)}}</td>
@@ -903,13 +1035,17 @@ def _html(payload: str) -> str:
     }}
     callsViewEl.addEventListener('click', () => setView('calls'));
     threadsViewEl.addEventListener('click', () => setView('threads'));
+    document.querySelectorAll('[data-sort-key]').forEach(button => {{
+      button.addEventListener('click', () => handleHeaderSort(button.dataset.sortKey));
+    }});
     rowsEl.addEventListener('mouseover', event => {{
       const callRow = event.target.closest('.thread-call-row');
       if (!callRow || !rowsEl.contains(callRow)) return;
       const row = rowByRecordId.get(callRow.dataset.recordId);
       if (row) showDetail(row);
     }});
-    [searchEl, modelEl, effortEl, pricingStatusEl, sortEl].forEach(el => el.addEventListener('input', render));
+    [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', render));
+    sortEl.addEventListener('input', () => setSort(sortEl.value, defaultSortDirection(sortEl.value)));
     render();
   </script>
 </body>
