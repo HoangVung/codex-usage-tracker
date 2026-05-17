@@ -54,7 +54,7 @@ Serve the dashboard with live aggregate refresh and lazy raw-context loading:
 codex-usage-tracker serve-dashboard --open
 ```
 
-When served this way, the dashboard gets a `Refresh now` button plus live updates that poll the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Each call detail panel also gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
+When served this way, the dashboard gets a `Refresh now` button plus live updates that poll the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
 
 Show a summary:
 

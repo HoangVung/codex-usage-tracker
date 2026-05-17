@@ -17,6 +17,8 @@ from codex_usage_tracker.pricing import (
 )
 from codex_usage_tracker.store import (
     export_usage_csv,
+    query_dashboard_event_count,
+    query_dashboard_events,
     query_most_expensive_calls,
     query_session_usage,
     query_summary,
@@ -92,6 +94,9 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "spawned threads" in dashboard
     assert "Refresh now" in dashboard
     assert "Live updates" in dashboard
+    assert "loadLimit" in dashboard
+    assert "pager" in dashboard
+    assert "All calls" in dashboard
     assert "/api/usage" in dashboard
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
@@ -122,20 +127,43 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     thread.start()
     try:
         with urllib.request.urlopen(  # noqa: S310 - local test server only
-            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1",
+            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1&limit=2",
             timeout=5,
         ) as response:
-            payload = json.loads(response.read().decode("utf-8"))
+            limited_payload = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(  # noqa: S310 - local test server only
+            f"http://127.0.0.1:{server.server_port}/api/usage?limit=all",
+            timeout=5,
+        ) as response:
+            all_payload = json.loads(response.read().decode("utf-8"))
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
 
-    assert payload["refresh_result"]["parsed_events"] == 4
-    assert len(payload["rows"]) == 4
-    assert payload["pricing_configured"] is True
-    assert "refreshed_at" in payload
-    assert "SECRET RAW PROMPT" not in json.dumps(payload)
+    assert limited_payload["refresh_result"]["parsed_events"] == 4
+    assert len(limited_payload["rows"]) == 2
+    assert limited_payload["loaded_row_count"] == 2
+    assert limited_payload["total_available_rows"] == 4
+    assert limited_payload["limit"] == 2
+    assert len(all_payload["rows"]) == 4
+    assert all_payload["loaded_row_count"] == 4
+    assert all_payload["total_available_rows"] == 4
+    assert all_payload["limit"] is None
+    assert all_payload["limit_label"] == "All"
+    assert limited_payload["pricing_configured"] is True
+    assert "refreshed_at" in limited_payload
+    assert "SECRET RAW PROMPT" not in json.dumps(limited_payload)
+
+
+def test_dashboard_query_limit_zero_loads_all_rows(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+
+    assert len(query_dashboard_events(db_path=db_path, limit=2)) == 2
+    assert len(query_dashboard_events(db_path=db_path, limit=0)) == 4
+    assert query_dashboard_event_count(db_path=db_path) == 4
 
 
 def test_context_loads_raw_log_only_on_demand(tmp_path: Path) -> None:

@@ -149,6 +149,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_usage(self, query: str) -> None:
         params = parse_qs(query)
+        limit = _parse_limit(_first(params.get("limit")), self._limit)
         refresh_result = None
         if _truthy(_first(params.get("refresh"))):
             with self._refresh_lock:
@@ -166,7 +167,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         try:
             payload = dashboard_payload(
                 db_path=self._db_path,
-                limit=self._limit,
+                limit=limit,
                 pricing_path=self._pricing_path,
                 since=self._since,
             )
@@ -196,6 +197,20 @@ def _first(values: list[str] | None) -> str | None:
 
 def _truthy(value: str | None) -> bool:
     return str(value or "").lower() in {"1", "true", "yes", "on"}
+
+
+def _parse_limit(value: str | None, default: int | None) -> int | None:
+    if value is None or value == "":
+        return default
+    if value.lower() == "all":
+        return None
+    try:
+        limit = int(value)
+    except ValueError:
+        return default
+    if limit <= 0:
+        return None
+    return limit
 
 
 def _utc_now() -> str:

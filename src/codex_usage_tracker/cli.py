@@ -110,7 +110,7 @@ def main() -> int:
 
     dashboard = subparsers.add_parser("dashboard", help="Generate static dashboard")
     dashboard.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
-    dashboard.add_argument("--limit", type=int, default=5000)
+    dashboard.add_argument("--limit", type=int, default=5000, help="Maximum calls to load; use 0 for all")
     dashboard.add_argument("--since", help="Only include calls at or after this ISO date/time")
     dashboard.add_argument("--open", action="store_true")
 
@@ -118,7 +118,7 @@ def main() -> int:
         "open-dashboard", help="Generate the default dashboard and open it"
     )
     open_dashboard.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
-    open_dashboard.add_argument("--limit", type=int, default=5000)
+    open_dashboard.add_argument("--limit", type=int, default=5000, help="Maximum calls to load; use 0 for all")
     open_dashboard.add_argument("--since", help="Only include calls at or after this ISO date/time")
     open_dashboard.add_argument(
         "--refresh",
@@ -132,7 +132,7 @@ def main() -> int:
         help="Serve dashboard with lazy localhost context loading",
     )
     serve.add_argument("--output", type=Path, default=DEFAULT_DASHBOARD_PATH)
-    serve.add_argument("--limit", type=int, default=5000)
+    serve.add_argument("--limit", type=int, default=5000, help="Initial maximum calls to load; use 0 for all")
     serve.add_argument("--since", help="Only include calls at or after this ISO date/time")
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)

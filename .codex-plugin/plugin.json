@@ -1,6 +1,6 @@
 {
   "name": "codex-usage-tracker",
-  "version": "0.1.12",
+  "version": "0.1.13",
   "description": "Track aggregate Codex token usage from local session logs.",
   "author": {
     "name": "Douglas Monsky"

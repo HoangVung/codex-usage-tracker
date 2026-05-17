@@ -8,12 +8,12 @@ from pathlib import Path
 
 from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
 from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
-from codex_usage_tracker.store import query_dashboard_events
+from codex_usage_tracker.store import query_dashboard_event_count, query_dashboard_events
 
 
 def dashboard_payload(
     db_path: Path,
-    limit: int = 5000,
+    limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     since: str | None = None,
 ) -> dict[str, object]:
@@ -21,17 +21,22 @@ def dashboard_payload(
 
     rows = query_dashboard_events(db_path=db_path, limit=limit, since=since)
     pricing = load_pricing_config(pricing_path)
+    normalized_limit = _normalize_limit(limit)
     return {
         "rows": annotate_rows_with_efficiency(rows, pricing),
         "pricing_configured": pricing.loaded and not pricing.error,
         "pricing_source": pricing.source,
+        "loaded_row_count": len(rows),
+        "total_available_rows": query_dashboard_event_count(db_path=db_path, since=since),
+        "limit": normalized_limit,
+        "limit_label": "All" if normalized_limit is None else str(normalized_limit),
     }
 
 
 def generate_dashboard(
     db_path: Path,
     output_path: Path = DEFAULT_DASHBOARD_PATH,
-    limit: int = 5000,
+    limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     since: str | None = None,
 ) -> Path:
@@ -47,6 +52,12 @@ def generate_dashboard(
     ).replace("</", "<\\/")
     output_path.write_text(_html(payload), encoding="utf-8")
     return output_path
+
+
+def _normalize_limit(limit: int | None) -> int | None:
+    if limit is None or limit <= 0:
+        return None
+    return int(limit)
 
 
 def _html(payload: str) -> str:
@@ -128,6 +139,23 @@ def _html(payload: str) -> str:
       color: var(--muted);
       font-size: 12px;
       font-weight: 680;
+    }}
+    .load-control {{
+      display: inline-flex;
+      grid-template-columns: none;
+      align-items: center;
+      gap: 7px;
+      min-height: 34px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 760;
+    }}
+    .load-control select {{
+      width: auto;
+      min-width: 104px;
+      min-height: 34px;
+      padding: 5px 8px;
+      font-size: 12px;
     }}
     main {{ padding: 22px 28px 36px; }}
     .filters {{
@@ -252,6 +280,30 @@ def _html(payload: str) -> str:
       color: var(--muted);
       font-size: 12px;
       font-weight: 680;
+    }}
+    .pager {{
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }}
+    .pager-button {{
+      min-height: 30px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }}
+    .pager-button:disabled {{
+      cursor: not-allowed;
+      color: var(--muted);
+      opacity: 0.55;
     }}
     .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
     .pill {{
@@ -426,6 +478,7 @@ def _html(payload: str) -> str:
       th, td {{ padding: 8px; }}
       .table-tools {{ align-items: stretch; flex-direction: column; }}
       .segmented, .segmented button {{ width: 100%; }}
+      .pager, .load-control {{ justify-content: space-between; width: 100%; }}
     }}
   </style>
 </head>
@@ -437,6 +490,14 @@ def _html(payload: str) -> str:
     <div class="live-bar">
       <button id="refreshDashboard" class="refresh-button" type="button">Refresh now</button>
       <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live updates</label>
+      <label class="load-control">Load
+        <select id="loadLimit">
+          <option value="5000">5,000 calls</option>
+          <option value="10000">10,000 calls</option>
+          <option value="20000">20,000 calls</option>
+          <option value="all">All calls</option>
+        </select>
+      </label>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
     </div>
   </header>
@@ -467,6 +528,11 @@ def _html(payload: str) -> str:
             <button id="threadsView" type="button" aria-pressed="false">Threads</button>
           </div>
           <div id="tableCaption" class="table-caption">Showing individual model calls.</div>
+          <div id="pager" class="pager" aria-label="Table pages">
+            <button id="prevPage" class="pager-button" type="button">Previous</button>
+            <span id="pageStatus">Page 1</span>
+            <button id="nextPage" class="pager-button" type="button">Next</button>
+          </div>
         </div>
         <table>
           <thead>
@@ -496,6 +562,8 @@ def _html(payload: str) -> str:
     let data = payloadRows(initialPayload);
     let pricingConfigured = Boolean(initialPayload.pricing_configured);
     let pricingSource = initialPayload.pricing_source || {{}};
+    let totalAvailableRows = Number(initialPayload.total_available_rows || data.length);
+    let loadedLimit = payloadLimit(initialPayload);
     const rowsEl = document.getElementById('rows');
     const detailEl = document.getElementById('detail');
     const searchEl = document.getElementById('search');
@@ -509,7 +577,11 @@ def _html(payload: str) -> str:
     const threadsViewEl = document.getElementById('threadsView');
     const refreshDashboardEl = document.getElementById('refreshDashboard');
     const autoRefreshEl = document.getElementById('autoRefresh');
+    const loadLimitEl = document.getElementById('loadLimit');
     const liveStatusEl = document.getElementById('liveStatus');
+    const prevPageEl = document.getElementById('prevPage');
+    const nextPageEl = document.getElementById('nextPage');
+    const pageStatusEl = document.getElementById('pageStatus');
     const number = new Intl.NumberFormat();
     let rowByRecordId = new Map();
     let parentCandidates = {{ bySession: new Map(), byCwd: new Map() }};
@@ -517,11 +589,13 @@ def _html(payload: str) -> str:
     const expandedThreads = new Set();
     const liveRefreshSupported = window.location.protocol !== 'file:';
     const liveRefreshIntervalMs = 10000;
+    const pageSize = 500;
     let activeView = 'calls';
     let sortKey = sortEl.value || 'time';
     let sortDirection = defaultSortDirection(sortKey);
     let refreshInFlight = false;
     let autoRefreshTimer = null;
+    let currentPage = 1;
     const money = (value, missingLabel = 'No price') => {{
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -578,6 +652,7 @@ def _html(payload: str) -> str:
       sortKey = key;
       sortDirection = direction || defaultSortDirection(key);
       sortEl.value = key;
+      currentPage = 1;
       render();
     }}
     function handleHeaderSort(key) {{
@@ -588,6 +663,7 @@ def _html(payload: str) -> str:
         sortDirection = defaultSortDirection(key);
       }}
       sortEl.value = key;
+      currentPage = 1;
       render();
     }}
     function updateSortControls() {{
@@ -604,6 +680,31 @@ def _html(payload: str) -> str:
     }}
     function payloadRows(nextPayload) {{
       return Array.isArray(nextPayload) ? nextPayload : Array.isArray(nextPayload.rows) ? nextPayload.rows : [];
+    }}
+    function payloadLimit(nextPayload) {{
+      if (!nextPayload || nextPayload.limit === null || nextPayload.limit === undefined) return null;
+      const parsed = Number(nextPayload.limit);
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+    }}
+    function limitValue(limit) {{
+      return limit === null || limit === undefined ? 'all' : String(limit);
+    }}
+    function loadedRowsDescription() {{
+      const loaded = number.format(data.length);
+      const available = number.format(totalAvailableRows || data.length);
+      const capped = loadedLimit !== null && totalAvailableRows > data.length;
+      return capped ? `${{loaded}} of ${{available}} calls loaded` : `${{loaded}} calls loaded`;
+    }}
+    function updateLoadLimitControl() {{
+      const value = limitValue(loadedLimit);
+      const existing = new Set(Array.from(loadLimitEl.options).map(option => option.value));
+      if (!existing.has(value)) {{
+        const option = document.createElement('option');
+        option.value = value;
+        option.textContent = `${{number.format(loadedLimit)}} calls`;
+        loadLimitEl.insertBefore(option, loadLimitEl.lastElementChild);
+      }}
+      loadLimitEl.value = value;
     }}
     function rebuildDashboardIndexes() {{
       rowByRecordId = new Map(data.map(row => [row.record_id, row]));
@@ -964,6 +1065,28 @@ def _html(payload: str) -> str:
       }});
       return arrangeThreadGroups(groups);
     }}
+    function paginate(items) {{
+      const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
+      currentPage = Math.min(Math.max(currentPage, 1), pageCount);
+      const start = (currentPage - 1) * pageSize;
+      const end = Math.min(start + pageSize, items.length);
+      return {{
+        items: items.slice(start, end),
+        start,
+        end,
+        total: items.length,
+        pageCount,
+      }};
+    }}
+    function updatePager(page) {{
+      prevPageEl.disabled = currentPage <= 1;
+      nextPageEl.disabled = currentPage >= page.pageCount;
+      if (!page.total) {{
+        pageStatusEl.textContent = 'No rows';
+        return;
+      }}
+      pageStatusEl.textContent = `Page ${{number.format(currentPage)}} of ${{number.format(page.pageCount)}} · ${{number.format(page.start + 1)}}-${{number.format(page.end)}} of ${{number.format(page.total)}}`;
+    }}
     function render() {{
       const rows = filtered();
       rowsEl.textContent = '';
@@ -990,9 +1113,11 @@ def _html(payload: str) -> str:
       }}
     }}
     function renderCalls(rows) {{
+      const page = paginate(rows);
+      updatePager(page);
       tableTitleEl.textContent = 'Model Calls';
-      tableCaptionEl.textContent = `Showing individual model calls sorted by ${{tableCaptionEl.dataset.sortDescription}}.`;
-      for (const row of rows.slice(0, 500)) {{
+      tableCaptionEl.textContent = `Showing individual model calls sorted by ${{tableCaptionEl.dataset.sortDescription}}. ${{loadedRowsDescription()}}.`;
+      for (const row of page.items) {{
         const tr = document.createElement('tr');
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
         tr.innerHTML = `
@@ -1014,9 +1139,11 @@ def _html(payload: str) -> str:
     }}
     function renderThreads(rows) {{
       const groups = groupThreads(rows);
+      const page = paginate(groups);
+      updatePager(page);
       tableTitleEl.textContent = 'Threads';
-      tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls, sorted by ${{tableCaptionEl.dataset.sortDescription}}. Click a thread to expand its calls.`;
-      for (const group of groups.slice(0, 500)) {{
+      tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls, sorted by ${{tableCaptionEl.dataset.sortDescription}}. ${{loadedRowsDescription()}}. Click a thread to expand its calls.`;
+      for (const group of page.items) {{
         const tr = document.createElement('tr');
         const expanded = expandedThreads.has(group.key);
         const threadNotes = [
@@ -1223,6 +1350,7 @@ def _html(payload: str) -> str:
     }}
     function setView(view) {{
       activeView = view;
+      currentPage = 1;
       render();
     }}
     function localTime(value) {{
@@ -1237,9 +1365,12 @@ def _html(payload: str) -> str:
       data = payloadRows(nextPayload);
       pricingConfigured = Boolean(nextPayload.pricing_configured);
       pricingSource = nextPayload.pricing_source || {{}};
+      totalAvailableRows = Number(nextPayload.total_available_rows || data.length);
+      loadedLimit = payloadLimit(nextPayload);
       rebuildDashboardIndexes();
       rebuildFilterOptions();
       updatePricingSourceLine();
+      updateLoadLimitControl();
       render();
     }}
     async function refreshDashboardData(manual = false) {{
@@ -1253,7 +1384,7 @@ def _html(payload: str) -> str:
       refreshDashboardEl.disabled = true;
       updateLiveStatus(manual ? 'Refreshing local usage index...' : 'Checking for new usage...');
       try {{
-        const params = new URLSearchParams({{ refresh: '1', _: String(Date.now()) }});
+        const params = new URLSearchParams({{ refresh: '1', limit: loadLimitEl.value, _: String(Date.now()) }});
         const response = await fetch(`/api/usage?${{params.toString()}}`, {{
           headers: {{ 'Accept': 'application/json' }},
           cache: 'no-store',
@@ -1268,7 +1399,7 @@ def _html(payload: str) -> str:
         const indexed = result.inserted_or_updated_events === undefined
           ? ''
           : ` Indexed ${{number.format(result.inserted_or_updated_events)}} aggregate rows from ${{number.format(result.scanned_files || 0)}} logs.`;
-        updateLiveStatus(`Updated ${{localTime(nextPayload.refreshed_at)}}. ${{number.format(data.length)}} calls loaded.${{indexed}}`);
+        updateLiveStatus(`Updated ${{localTime(nextPayload.refreshed_at)}}. ${{loadedRowsDescription()}}.${{indexed}}`);
       }} catch (error) {{
         const message = error.message || String(error);
         updateLiveStatus(`Live refresh unavailable: ${{message}}${{manual ? '. Reload this page after regenerating a static dashboard, or run codex-usage-tracker serve-dashboard.' : ''}}`);
@@ -1289,13 +1420,29 @@ def _html(payload: str) -> str:
     callsViewEl.addEventListener('click', () => setView('calls'));
     threadsViewEl.addEventListener('click', () => setView('threads'));
     refreshDashboardEl.addEventListener('click', () => refreshDashboardData(true));
+    loadLimitEl.addEventListener('change', () => {{
+      currentPage = 1;
+      if (liveRefreshSupported) {{
+        refreshDashboardData(true);
+      }} else {{
+        updateLiveStatus('Run codex-usage-tracker serve-dashboard to load a different history size from the dashboard.');
+      }}
+    }});
     autoRefreshEl.addEventListener('change', () => {{
       scheduleAutoRefresh();
-      updateLiveStatus(autoRefreshEl.checked ? `Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s.` : 'Live updates paused.');
+      updateLiveStatus(autoRefreshEl.checked ? `Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s. ${{loadedRowsDescription()}}.` : `Live updates paused. ${{loadedRowsDescription()}}.`);
       if (autoRefreshEl.checked) refreshDashboardData(false);
     }});
     document.addEventListener('visibilitychange', () => {{
       if (document.visibilityState === 'visible' && autoRefreshEl.checked) refreshDashboardData(false);
+    }});
+    prevPageEl.addEventListener('click', () => {{
+      currentPage = Math.max(1, currentPage - 1);
+      render();
+    }});
+    nextPageEl.addEventListener('click', () => {{
+      currentPage += 1;
+      render();
     }});
     document.querySelectorAll('[data-sort-key]').forEach(button => {{
       button.addEventListener('click', () => handleHeaderSort(button.dataset.sortKey));
@@ -1306,17 +1453,22 @@ def _html(payload: str) -> str:
       const row = rowByRecordId.get(callRow.dataset.recordId);
       if (row) showDetail(row);
     }});
-    [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', render));
+    [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', () => {{
+      currentPage = 1;
+      render();
+    }}));
     sortEl.addEventListener('input', () => setSort(sortEl.value, defaultSortDirection(sortEl.value)));
     rebuildDashboardIndexes();
     rebuildFilterOptions();
     updatePricingSourceLine();
+    updateLoadLimitControl();
     if (!liveRefreshSupported) {{
       autoRefreshEl.checked = false;
       autoRefreshEl.disabled = true;
-      updateLiveStatus('Static file mode. Refresh reloads the dashboard snapshot.');
+      loadLimitEl.disabled = true;
+      updateLiveStatus(`Static file mode. ${{loadedRowsDescription()}}. Refresh reloads the dashboard snapshot.`);
     }} else {{
-      updateLiveStatus(`Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s.`);
+      updateLiveStatus(`Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s. ${{loadedRowsDescription()}}.`);
       scheduleAutoRefresh();
     }}
     render();

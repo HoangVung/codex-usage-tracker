@@ -279,9 +279,12 @@ def query_usage_record(
 
 
 def query_dashboard_events(
-    db_path: Path = DEFAULT_DB_PATH, limit: int = 5000, since: str | None = None
+    db_path: Path = DEFAULT_DB_PATH, limit: int | None = 5000, since: str | None = None
 ) -> list[dict[str, Any]]:
     where_clause, params = _since_where_clause(since)
+    normalized_limit = _normalize_limit(limit)
+    limit_clause = "LIMIT ?" if normalized_limit is not None else ""
+    query_params = [*params, normalized_limit] if normalized_limit is not None else params
     with connect(db_path) as conn:
         init_db(conn)
         rows = conn.execute(
@@ -309,11 +312,30 @@ def query_dashboard_events(
             ON usage_events.parent_session_id = parent_threads.session_id
             {where_clause}
             ORDER BY usage_events.event_timestamp DESC, usage_events.cumulative_total_tokens DESC
-            LIMIT ?
+            {limit_clause}
             """,
-            (*params, limit),
+            query_params,
         )
         return [_row_to_dict(row) for row in rows]
+
+
+def query_dashboard_event_count(
+    db_path: Path = DEFAULT_DB_PATH, since: str | None = None
+) -> int:
+    """Return total aggregate usage rows available for the dashboard window."""
+
+    where_clause, params = _since_where_clause(since)
+    with connect(db_path) as conn:
+        init_db(conn)
+        row = conn.execute(
+            f"""
+            SELECT COUNT(*) AS row_count
+            FROM usage_events
+            {where_clause}
+            """,
+            params,
+        ).fetchone()
+        return int(row["row_count"] if row is not None else 0)
 
 
 def query_most_expensive_calls(
@@ -383,6 +405,12 @@ def _since_where_clause(since: str | None) -> tuple[str, list[str]]:
     if not since:
         return "", []
     return "WHERE event_timestamp >= ?", [since]
+
+
+def _normalize_limit(limit: int | None) -> int | None:
+    if limit is None or limit <= 0:
+        return None
+    return int(limit)
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
