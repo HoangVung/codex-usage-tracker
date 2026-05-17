@@ -38,6 +38,7 @@ codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker pricing-coverage
+codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5
 ```
 
@@ -45,6 +46,7 @@ codex-usage-tracker expensive --limit 5
 
 - Never commit real Codex session logs.
 - Never store raw prompts, assistant text, tool outputs, pasted secrets, or message snippets.
+- Store only selected aggregate session metadata for subagents; do not persist raw session instructions or source JSON.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
 - Do not hard-code real current model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides. Internal Codex model estimates must be explicitly marked as estimates with source and rationale metadata.
@@ -58,4 +60,5 @@ codex-usage-tracker expensive --limit 5
 - Doctor, summary presets, dashboard, and expensive-call views work from CLI and MCP wrappers.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
+- Subagent calls preserve logged parent-session metadata, and auto-review attachment is clearly marked when inferred.
 - Tests and compile checks pass.

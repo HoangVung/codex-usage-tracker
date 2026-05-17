@@ -32,6 +32,11 @@ EVENT_COLUMNS = [
     "effort",
     "current_date",
     "timezone",
+    "thread_source",
+    "subagent_type",
+    "agent_role",
+    "agent_nickname",
+    "parent_session_id",
     "model_context_window",
     "input_tokens",
     "cached_input_tokens",
@@ -94,6 +99,11 @@ def init_db(conn: sqlite3.Connection) -> None:
             effort TEXT,
             current_date TEXT,
             timezone TEXT,
+            thread_source TEXT,
+            subagent_type TEXT,
+            agent_role TEXT,
+            agent_nickname TEXT,
+            parent_session_id TEXT,
             model_context_window INTEGER,
             input_tokens INTEGER NOT NULL,
             cached_input_tokens INTEGER NOT NULL,
@@ -122,6 +132,26 @@ def init_db(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_usage_thread ON usage_events(thread_name);
         """
     )
+    _ensure_columns(
+        conn,
+        {
+            "thread_source": "TEXT",
+            "subagent_type": "TEXT",
+            "agent_role": "TEXT",
+            "agent_nickname": "TEXT",
+            "parent_session_id": "TEXT",
+        },
+    )
+
+
+def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str]) -> None:
+    existing = {
+        str(row["name"])
+        for row in conn.execute("PRAGMA table_info(usage_events)").fetchall()
+    }
+    for column, column_type in columns.items():
+        if column not in existing:
+            conn.execute(f"ALTER TABLE usage_events ADD COLUMN {column} {column_type}")
 
 
 def upsert_usage_events(
@@ -285,6 +315,10 @@ def _group_expression(group_by: str) -> str:
         "cwd": "coalesce(cwd, 'Unknown cwd')",
         "thread": "coalesce(thread_name, session_id)",
         "session": "session_id",
+        "thread_source": "coalesce(thread_source, 'user')",
+        "subagent_type": "coalesce(subagent_type, 'not subagent')",
+        "agent_role": "coalesce(agent_role, 'not agent role')",
+        "parent_session": "coalesce(parent_session_id, 'no parent session')",
     }
     try:
         return mapping[group_by]

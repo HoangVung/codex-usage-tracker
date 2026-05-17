@@ -41,6 +41,7 @@ def _html(payload: str) -> str:
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="data:,">
   <title>{title}</title>
   <style>
     :root {{
@@ -348,6 +349,8 @@ def _html(payload: str) -> str:
     const threadsViewEl = document.getElementById('threadsView');
     const number = new Intl.NumberFormat();
     const rowByRecordId = new Map(data.map(row => [row.record_id, row]));
+    const parentCandidates = buildParentCandidates(data);
+    const threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
     const expandedThreads = new Set();
     let activeView = 'calls';
     const money = (value, missingLabel = 'No price') => {{
@@ -393,7 +396,19 @@ def _html(payload: str) -> str:
       const effort = effortEl.value;
       const pricingStatus = pricingStatusEl.value;
       const rows = data.filter(row => {{
-        const haystack = [row.thread_name, row.cwd, row.model, row.effort, row.session_id, row.turn_id].join(' ').toLowerCase();
+        const haystack = [
+          rowThreadLabel(row),
+          row.cwd,
+          row.model,
+          row.effort,
+          row.session_id,
+          row.turn_id,
+          row.thread_source,
+          row.subagent_type,
+          row.agent_role,
+          row.agent_nickname,
+          row.parent_session_id,
+        ].join(' ').toLowerCase();
         const statusMatches = !pricingStatus
           || (pricingStatus === 'official' && row.pricing_model && !row.pricing_estimated)
           || (pricingStatus === 'estimated' && row.pricing_estimated)
@@ -408,6 +423,113 @@ def _html(payload: str) -> str:
         return Number(b.total_tokens || 0) - Number(a.total_tokens || 0);
       }});
       return rows;
+    }}
+    function buildParentCandidates(rows) {{
+      const bySession = new Map();
+      const byCwd = new Map();
+      for (const row of rows) {{
+        if (!row.thread_name || row.thread_source === 'subagent') continue;
+        const key = `thread:${{row.thread_name}}`;
+        if (!bySession.has(row.session_id)) {{
+          bySession.set(row.session_id, {{
+            key,
+            label: row.thread_name,
+            sessionId: row.session_id,
+            cwd: row.cwd,
+            first: row.event_timestamp || '',
+            latest: row.event_timestamp || '',
+          }});
+        }}
+        const candidate = bySession.get(row.session_id);
+        if (String(row.event_timestamp || '') < String(candidate.first || '')) candidate.first = row.event_timestamp || '';
+        if (String(row.event_timestamp || '') > String(candidate.latest || '')) candidate.latest = row.event_timestamp || '';
+      }}
+      for (const candidate of bySession.values()) {{
+        if (!candidate.cwd) continue;
+        if (!byCwd.has(candidate.cwd)) byCwd.set(candidate.cwd, []);
+        byCwd.get(candidate.cwd).push(candidate);
+      }}
+      return {{ bySession, byCwd }};
+    }}
+    function rowTime(row) {{
+      const value = Date.parse(row.event_timestamp || '');
+      return Number.isNaN(value) ? 0 : value;
+    }}
+    function candidateDistance(row, candidate) {{
+      const eventTime = rowTime(row);
+      const first = Date.parse(candidate.first || '');
+      const latest = Date.parse(candidate.latest || '');
+      if (!eventTime || Number.isNaN(first) || Number.isNaN(latest)) return 0;
+      if (eventTime >= first && eventTime <= latest) return 0;
+      return Math.min(Math.abs(eventTime - first), Math.abs(eventTime - latest));
+    }}
+    function basenamePath(path) {{
+      const text = short(path, 'Unknown project');
+      const parts = text.split('/').filter(Boolean);
+      return parts.length ? parts[parts.length - 1] : text;
+    }}
+    function isAutoReview(row) {{
+      return row.model === 'codex-auto-review' || row.subagent_type === 'guardian';
+    }}
+    function isSubagent(row) {{
+      return row.thread_source === 'subagent' || Boolean(row.subagent_type || row.parent_session_id);
+    }}
+    function sourceLabel(row) {{
+      if (isAutoReview(row)) return 'Auto-review';
+      if (row.subagent_type === 'thread_spawn') {{
+        return row.agent_role ? `Subagent: ${{row.agent_role}}` : 'Subagent';
+      }}
+      if (isSubagent(row)) return 'Subagent';
+      return 'User';
+    }}
+    function resolveThreadAttachment(row) {{
+      if (row.thread_name) {{
+        return {{ key: `thread:${{row.thread_name}}`, label: row.thread_name, relation: 'direct' }};
+      }}
+      if (row.parent_session_id && parentCandidates.bySession.has(row.parent_session_id)) {{
+        const parent = parentCandidates.bySession.get(row.parent_session_id);
+        return {{
+          key: parent.key,
+          label: parent.label,
+          relation: 'explicit parent',
+          parentSessionId: row.parent_session_id,
+        }};
+      }}
+      if (row.parent_session_id) {{
+        return {{
+          key: `session:${{row.parent_session_id}}`,
+          label: `Parent ${{row.parent_session_id}}`,
+          relation: 'explicit parent',
+          parentSessionId: row.parent_session_id,
+        }};
+      }}
+      if (isAutoReview(row)) {{
+        const candidates = parentCandidates.byCwd.get(row.cwd) || [];
+        if (candidates.length) {{
+          const nearest = candidates.slice().sort((a, b) => candidateDistance(row, a) - candidateDistance(row, b))[0];
+          return {{
+            key: nearest.key,
+            label: nearest.label,
+            relation: 'inferred by cwd/time',
+          }};
+        }}
+        return {{
+          key: `auto:${{row.cwd || row.session_id}}`,
+          label: `Auto-review: ${{basenamePath(row.cwd)}}`,
+          relation: 'unmatched auto-review',
+        }};
+      }}
+      return {{
+        key: `session:${{row.session_id || 'unknown'}}`,
+        label: row.session_id || 'Unknown thread',
+        relation: isSubagent(row) ? 'unmatched subagent' : 'session',
+      }};
+    }}
+    function rowAttachment(row) {{
+      return threadAttachmentByRecordId.get(row.record_id) || resolveThreadAttachment(row);
+    }}
+    function rowThreadLabel(row) {{
+      return rowAttachment(row).label;
     }}
     function chronological(a, b) {{
       const timeCompare = String(a.event_timestamp || '').localeCompare(String(b.event_timestamp || ''));
@@ -435,9 +557,10 @@ def _html(payload: str) -> str:
     function groupThreads(rows) {{
       const map = new Map();
       for (const row of rows) {{
-        const key = row.thread_name || row.session_id || 'Unknown thread';
+        const attachment = rowAttachment(row);
+        const key = attachment.key;
         if (!map.has(key)) {{
-          map.set(key, {{ key, label: key, rows: [] }});
+          map.set(key, {{ key, label: attachment.label, rows: [] }});
         }}
         map.get(key).rows.push(row);
       }}
@@ -450,6 +573,9 @@ def _html(payload: str) -> str:
         const signalCount = calls.reduce((sum, row) => sum + (Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0), 0);
         const latestActivity = calls.reduce((latest, row) => String(row.event_timestamp || '') > latest ? String(row.event_timestamp || '') : latest, '');
         const maxContextUse = calls.reduce((max, row) => Math.max(max, Number(row.context_window_percent || 0)), 0);
+        const subagentCount = calls.filter(isSubagent).length;
+        const autoReviewCount = calls.filter(isAutoReview).length;
+        const attachedCount = calls.filter(row => rowAttachment(row).relation !== 'direct' && rowAttachment(row).relation !== 'session').length;
         return {{
           key: group.key,
           label: group.label,
@@ -462,6 +588,9 @@ def _html(payload: str) -> str:
           maxContextUse,
           pricingStatus: pricingStatusFor(calls),
           signalCount,
+          subagentCount,
+          autoReviewCount,
+          attachedCount,
         }};
       }}));
     }}
@@ -497,7 +626,7 @@ def _html(payload: str) -> str:
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
-          <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(row.thread_name || row.session_id))}}</td>
+          <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(rowThreadLabel(row)))}}</td>
           <td><span class="pill">${{escapeHtml(short(row.model))}}</span></td>
           <td>${{escapeHtml(short(row.effort))}}</td>
           <td class="num">${{number.format(row.total_tokens || 0)}}</td>
@@ -519,16 +648,23 @@ def _html(payload: str) -> str:
       for (const group of groups.slice(0, 500)) {{
         const tr = document.createElement('tr');
         const expanded = expandedThreads.has(group.key);
+        const threadNotes = [
+          `${{number.format(group.callCount)}} calls`,
+          group.pricingStatus,
+          group.subagentCount ? `${{number.format(group.subagentCount)}} subagent` : '',
+          group.autoReviewCount ? `${{number.format(group.autoReviewCount)}} auto-review` : '',
+          group.attachedCount ? 'attached' : '',
+        ].filter(Boolean).join(' - ');
         tr.className = 'thread-row';
         tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(group.latestActivity, 20))}}</td>
           <td>
             <div class="thread-title">
-              <span class="thread-toggle" aria-hidden="true">${{expanded ? '-' : '+'}}</span>
+                <span class="thread-toggle" aria-hidden="true">${{expanded ? '-' : '+'}}</span>
               <span class="thread-meta">
                 <span class="thread-name">${{escapeHtml(truncate(group.label, 72))}}</span>
-                <span class="thread-subtle">${{number.format(group.callCount)}} calls - ${{group.pricingStatus}}</span>
+                <span class="thread-subtle">${{escapeHtml(threadNotes)}}</span>
               </span>
             </div>
           </td>
@@ -567,6 +703,7 @@ def _html(payload: str) -> str:
             <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
             <td>${{escapeHtml(short(row.model))}}</td>
             <td>${{escapeHtml(short(row.effort))}}</td>
+            <td>${{escapeHtml(sourceLabel(row))}}</td>
             <td class="num">${{number.format(row.total_tokens || 0)}}</td>
             <td class="num">${{escapeHtml(row.pricing_estimated ? `${{money(row.estimated_cost_usd)}}*` : money(row.estimated_cost_usd))}}</td>
             <td class="num">${{pct(row.cache_ratio)}}</td>
@@ -577,7 +714,7 @@ def _html(payload: str) -> str:
       tr.innerHTML = `
         <td class="child-cell" colspan="8">
           <table class="thread-call-table" aria-label="${{escapeHtml(group.label)}} calls">
-            <thead><tr><th>Time</th><th>Model</th><th>Effort</th><th class="num">Last Call</th><th class="num">Cost</th><th class="num">Cache</th><th>Signals</th></tr></thead>
+            <thead><tr><th>Time</th><th>Model</th><th>Effort</th><th>Source</th><th class="num">Last Call</th><th class="num">Cost</th><th class="num">Cache</th><th>Signals</th></tr></thead>
             <tbody>${{calls}}</tbody>
           </table>
         </td>
@@ -585,9 +722,16 @@ def _html(payload: str) -> str:
       return tr;
     }}
     function showDetail(row) {{
+      const attachment = rowAttachment(row);
       const fields = [
-        ['Thread', row.thread_name || row.session_id],
+        ['Thread', attachment.label],
+        ['Thread attachment', attachment.relation],
         ['Session', row.session_id],
+        ['Thread source', row.thread_source || 'user'],
+        ['Subagent type', row.subagent_type || 'None'],
+        ['Agent role', row.agent_role || 'None'],
+        ['Agent nickname', row.agent_nickname || 'None'],
+        ['Parent session', row.parent_session_id || 'None'],
         ['Turn', row.turn_id],
         ['Timestamp', row.event_timestamp],
         ['Model', row.model],
@@ -621,6 +765,9 @@ def _html(payload: str) -> str:
         ['Cache ratio', pct(group.cacheRatio)],
         ['Pricing status', group.pricingStatus],
         ['Efficiency signals', number.format(group.signalCount)],
+        ['Subagent calls', number.format(group.subagentCount)],
+        ['Auto-review calls', number.format(group.autoReviewCount)],
+        ['Attached calls', number.format(group.attachedCount)],
         ['Max context use', pct(group.maxContextUse)],
       ];
       detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${{escapeHtml(key)}}</dt><dd>${{escapeHtml(short(value))}}</dd>`).join('') + '</dl>';

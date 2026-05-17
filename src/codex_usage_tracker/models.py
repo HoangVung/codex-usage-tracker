@@ -32,6 +32,11 @@ class UsageEvent:
     effort: str | None
     current_date: str | None
     timezone: str | None
+    thread_source: str | None
+    subagent_type: str | None
+    agent_role: str | None
+    agent_nickname: str | None
+    parent_session_id: str | None
     model_context_window: int | None
     input_tokens: int
     cached_input_tokens: int

@@ -19,6 +19,22 @@ def test_parser_skips_missing_info_and_duplicate_snapshots(tmp_path: Path) -> No
         [
             _entry("session_meta", {"id": SESSION_ID}),
             _entry(
+                "session_meta",
+                {
+                    "id": SESSION_ID,
+                    "thread_source": "subagent",
+                    "source": {
+                        "subagent": {
+                            "thread_spawn": {
+                                "parent_thread_id": "parent-session",
+                                "agent_nickname": "Verifier",
+                                "agent_role": "test_runner",
+                            }
+                        }
+                    },
+                },
+            ),
+            _entry(
                 "turn_context",
                 {
                     "turn_id": "turn-a",
@@ -62,6 +78,11 @@ def test_parser_skips_missing_info_and_duplicate_snapshots(tmp_path: Path) -> No
     assert events[0].turn_id == "turn-a"
     assert events[-1].turn_id == "turn-b"
     assert events[-1].effort == "high"
+    assert events[0].thread_source == "subagent"
+    assert events[0].subagent_type == "thread_spawn"
+    assert events[0].agent_role == "test_runner"
+    assert events[0].agent_nickname == "Verifier"
+    assert events[0].parent_session_id == "parent-session"
     assert all("SECRET" not in str(event.to_row()) for event in events)
 
 

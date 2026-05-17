@@ -20,7 +20,7 @@ The tracker is aggregate-only. It should never return prompts, assistant message
 - Use `usage_pricing_coverage` when the user asks whether costs are fully priced or which models use estimated or missing pricing.
 - Use `session_usage` for per-call and per-turn detail for one session.
 - Use `most_expensive_usage_calls` to identify high-token calls and aggregate efficiency signals.
-- Use `generate_usage_dashboard` when the user wants a visual hoverable report, including flat calls and threaded-by-thread views.
+- Use `generate_usage_dashboard` when the user wants a visual hoverable report, including flat calls, threaded-by-thread views, and subagent/auto-review attachment details.
 - Use `export_usage_csv` when the user wants local spreadsheet-friendly data.
 - Use `update_usage_pricing_config` when the user wants cost estimates based on OpenAI-published text-token pricing. This refreshes the local pricing cache and does not send local usage data anywhere. Internal Codex labels may include explicitly marked best-guess estimates when no public pricing row exists.
 - Use `init_usage_pricing_config` only when the user wants a manual local pricing template or override file.

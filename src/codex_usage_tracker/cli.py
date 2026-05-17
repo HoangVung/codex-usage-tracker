@@ -57,12 +57,32 @@ def main() -> int:
     summary = subparsers.add_parser("summary", help="Show aggregate usage summary")
     summary.add_argument(
         "--group-by",
-        choices=["date", "model", "effort", "cwd", "thread", "session"],
+        choices=[
+            "date",
+            "model",
+            "effort",
+            "cwd",
+            "thread",
+            "session",
+            "thread_source",
+            "subagent_type",
+            "agent_role",
+            "parent_session",
+        ],
         default="thread",
     )
     summary.add_argument(
         "--preset",
-        choices=["today", "last-7-days", "by-model", "by-cwd", "by-thread", "expensive"],
+        choices=[
+            "today",
+            "last-7-days",
+            "by-model",
+            "by-cwd",
+            "by-thread",
+            "by-subagent-role",
+            "by-subagent-type",
+            "expensive",
+        ],
         help="Convenience preset for common summaries",
     )
     summary.add_argument("--since", help="Only include calls at or after this ISO date/time")
@@ -254,6 +274,10 @@ def _resolve_summary_options(
         group_by = "cwd"
     elif preset == "by-thread":
         group_by = "thread"
+    elif preset == "by-subagent-role":
+        group_by = "agent_role"
+    elif preset == "by-subagent-type":
+        group_by = "subagent_type"
     return group_by, _resolve_since(preset, since)
 
 

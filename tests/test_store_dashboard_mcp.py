@@ -20,6 +20,7 @@ from codex_usage_tracker.store import (
 
 SESSION_ID = "019e374d-c19f-7da3-a44f-8de043a7a64e"
 SECOND_SESSION_ID = "019e37d4-c1f1-71aa-b154-2d5d837af92c"
+AUTO_REVIEW_SESSION_ID = "019e37d5-01fd-71df-87f4-ae3e8d60df7a"
 
 
 def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
@@ -32,15 +33,17 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     summary = query_summary(db_path=db_path, group_by="model")
     recent_summary = query_summary(db_path=db_path, group_by="model", since="2026-05-17")
     future_summary = query_summary(db_path=db_path, group_by="model", since="2099-01-01")
+    subagent_summary = query_summary(db_path=db_path, group_by="agent_role")
     expensive = query_most_expensive_calls(db_path=db_path, limit=1)
 
-    assert first.parsed_events == 3
-    assert second.parsed_events == 3
+    assert first.parsed_events == 4
+    assert second.parsed_events == 4
     assert len(session_rows) == 2
     assert summary[0]["group_key"] == "gpt-5.5"
     assert summary[0]["total_tokens"] == 350
     assert recent_summary[0]["total_tokens"] == 350
     assert future_summary == []
+    assert {row["group_key"] for row in subagent_summary} >= {"test_runner", "not agent role"}
     assert expensive[0]["total_tokens"] == 200
 
 
@@ -57,7 +60,7 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
 
     dashboard = dashboard_path.read_text(encoding="utf-8")
     csv_text = csv_path.read_text(encoding="utf-8")
-    assert exported == 3
+    assert exported == 4
     assert "SECRET RAW PROMPT" not in dashboard
     assert "SECRET RAW PROMPT" not in csv_text
     assert "last call" in dashboard.lower()
@@ -68,6 +71,9 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "threadsView" in dashboard
     assert "thread-row" in dashboard
     assert "thread-call-table" in dashboard
+    assert "Thread attachment" in dashboard
+    assert "Subagent type" in dashboard
+    assert "Auto-review" in dashboard
 
 
 def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
@@ -93,7 +99,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     pricing_update = mcp_server.update_usage_pricing_config()
     doctor = mcp_server.usage_doctor()
 
-    assert refresh["parsed_events"] == 3
+    assert refresh["parsed_events"] == 4
     assert "Add Codex token tracking" in summary
     assert "estimated cost" in model_summary
     assert "Most expensive Codex calls" in expensive
@@ -164,6 +170,7 @@ def _make_codex_home(tmp_path: Path) -> Path:
     log_dir = codex_home / "sessions" / "2026" / "05" / "17"
     log_path = log_dir / f"rollout-2026-05-17T14-58-23-{SESSION_ID}.jsonl"
     second_log_path = log_dir / f"rollout-2026-05-17T16-24-11-{SECOND_SESSION_ID}.jsonl"
+    auto_review_log_path = log_dir / f"rollout-2026-05-17T16-31-02-{AUTO_REVIEW_SESSION_ID}.jsonl"
     _write_jsonl(
         codex_home / "session_index.jsonl",
         [
@@ -174,8 +181,11 @@ def _make_codex_home(tmp_path: Path) -> Path:
             },
             {
                 "id": SECOND_SESSION_ID,
-                "thread_name": "Review Codex pricing coverage",
                 "updated_at": "2026-05-17T20:24:11Z",
+            },
+            {
+                "id": AUTO_REVIEW_SESSION_ID,
+                "updated_at": "2026-05-17T20:31:02Z",
             },
         ],
     )
@@ -207,13 +217,51 @@ def _make_codex_home(tmp_path: Path) -> Path:
     _write_jsonl(
         second_log_path,
         [
-            _entry("session_meta", {"id": SECOND_SESSION_ID}),
+            _entry(
+                "session_meta",
+                {
+                    "id": SECOND_SESSION_ID,
+                    "thread_source": "subagent",
+                    "source": {
+                        "subagent": {
+                            "thread_spawn": {
+                                "parent_thread_id": SESSION_ID,
+                                "agent_nickname": "Verifier",
+                                "agent_role": "test_runner",
+                            }
+                        }
+                    },
+                },
+            ),
             _entry(
                 "turn_context",
                 {
                     "turn_id": "turn-c",
                     "model": "gpt-5.5",
                     "effort": "medium",
+                    "cwd": "/tmp/codex-usage-tracker",
+                },
+            ),
+            _token_event(50, 50),
+        ],
+    )
+    _write_jsonl(
+        auto_review_log_path,
+        [
+            _entry(
+                "session_meta",
+                {
+                    "id": AUTO_REVIEW_SESSION_ID,
+                    "thread_source": "subagent",
+                    "source": {"subagent": {"other": "guardian"}},
+                },
+            ),
+            _entry(
+                "turn_context",
+                {
+                    "turn_id": "turn-d",
+                    "model": "codex-auto-review",
+                    "effort": "low",
                     "cwd": "/tmp/codex-usage-tracker",
                 },
             ),

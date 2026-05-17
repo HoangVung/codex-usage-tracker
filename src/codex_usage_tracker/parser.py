@@ -75,6 +75,7 @@ def parse_usage_events_from_file(
     session_id = file_session_id
     session_info = index.get(session_id) if session_id else None
     current_turn: dict[str, Any] = {}
+    session_meta: dict[str, str | None] = {}
     last_cumulative_total = -1
     events: list[UsageEvent] = []
 
@@ -92,9 +93,11 @@ def parse_usage_events_from_file(
             entry_type = envelope.get("type")
             timestamp = _optional_str(envelope.get("timestamp")) or ""
 
-            if entry_type == "session_meta" and not session_id:
-                session_id = _optional_str(payload.get("id"))
-                session_info = index.get(session_id or "")
+            if entry_type == "session_meta":
+                if not session_id:
+                    session_id = _optional_str(payload.get("id"))
+                    session_info = index.get(session_id or "")
+                session_meta = _session_metadata(payload)
                 continue
 
             if entry_type == "turn_context":
@@ -134,6 +137,7 @@ def parse_usage_events_from_file(
                 event_timestamp=timestamp,
                 session_id=effective_session_id,
                 session_info=session_info,
+                session_meta=session_meta,
                 current_turn=current_turn,
                 model_context_window=_nullable_int(info.get("model_context_window")),
                 last_usage=last_usage,
@@ -150,6 +154,7 @@ def _build_event(
     event_timestamp: str,
     session_id: str,
     session_info: SessionInfo | None,
+    session_meta: dict[str, str | None],
     current_turn: dict[str, Any],
     model_context_window: int | None,
     last_usage: dict[str, Any],
@@ -183,6 +188,11 @@ def _build_event(
         effort=_optional_str(current_turn.get("effort")),
         current_date=_optional_str(current_turn.get("current_date")),
         timezone=_optional_str(current_turn.get("timezone")),
+        thread_source=session_meta.get("thread_source"),
+        subagent_type=session_meta.get("subagent_type"),
+        agent_role=session_meta.get("agent_role"),
+        agent_nickname=session_meta.get("agent_nickname"),
+        parent_session_id=session_meta.get("parent_session_id"),
         model_context_window=model_context_window,
         input_tokens=input_tokens,
         cached_input_tokens=cached_input_tokens,
@@ -197,6 +207,38 @@ def _build_event(
         ),
         cumulative_total_tokens=cumulative_total_tokens,
     )
+
+
+def _session_metadata(payload: dict[str, Any]) -> dict[str, str | None]:
+    source = payload.get("source")
+    metadata: dict[str, str | None] = {
+        "thread_source": _optional_str(payload.get("thread_source")),
+        "subagent_type": None,
+        "agent_role": None,
+        "agent_nickname": None,
+        "parent_session_id": None,
+    }
+    if not isinstance(source, dict):
+        return metadata
+
+    subagent = source.get("subagent")
+    if not isinstance(subagent, dict):
+        return metadata
+
+    other = _optional_str(subagent.get("other"))
+    if other:
+        metadata["subagent_type"] = other
+        return metadata
+
+    thread_spawn = subagent.get("thread_spawn")
+    if isinstance(thread_spawn, dict):
+        metadata["subagent_type"] = "thread_spawn"
+        metadata["agent_role"] = _optional_str(thread_spawn.get("agent_role"))
+        metadata["agent_nickname"] = _optional_str(thread_spawn.get("agent_nickname"))
+        metadata["parent_session_id"] = _optional_str(
+            thread_spawn.get("parent_thread_id")
+        )
+    return metadata
 
 
 def _record_id(

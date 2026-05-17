@@ -11,6 +11,7 @@ Local Codex plugin and dashboard for tracking aggregate token usage from Codex s
 - Generates a static hoverable dashboard with flat calls and threaded-by-thread views.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
 - Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
+- Tracks aggregate subagent metadata, including explicit parent session ids when Codex logs them.
 
 The tracker intentionally does not store prompts, assistant messages, tool outputs, pasted secrets, or raw transcript snippets.
 
@@ -44,7 +45,7 @@ codex-usage-tracker dashboard --open
 codex-usage-tracker open-dashboard
 ```
 
-The dashboard opens in the flat Calls view. Use the Calls/Threads toggle to group filtered usage by thread, then click a thread row to expand its calls in chronological order.
+The dashboard opens in the flat Calls view. Use the Calls/Threads toggle to group filtered usage by thread, then click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are attached to that parent thread. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
 
 Show a summary:
 
@@ -54,6 +55,7 @@ codex-usage-tracker summary --group-by thread --limit 20
 codex-usage-tracker summary --preset today
 codex-usage-tracker summary --preset last-7-days
 codex-usage-tracker summary --preset expensive
+codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 10
 codex-usage-tracker pricing-coverage
 ```
@@ -118,6 +120,7 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 - session id, thread name, cwd, source file, turn id, timestamps
 - model, reasoning effort, context window
 - token counts and derived efficiency ratios
+- subagent source, role, nickname, and parent session id when present
 
 Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database or dashboard.
 
@@ -132,5 +135,6 @@ codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker pricing-coverage
+codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5
 ```
