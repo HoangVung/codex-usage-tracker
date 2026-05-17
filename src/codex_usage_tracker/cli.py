@@ -18,8 +18,11 @@ from codex_usage_tracker.paths import (
     DEFAULT_PRICING_PATH,
 )
 from codex_usage_tracker.pricing import (
+    OPENAI_PRICING_MD_URL,
+    VALID_PRICING_TIERS,
     annotate_rows_with_efficiency,
     load_pricing_config,
+    update_pricing_from_openai_docs,
     write_pricing_template,
 )
 from codex_usage_tracker.store import (
@@ -97,6 +100,14 @@ def main() -> int:
     pricing = subparsers.add_parser("init-pricing", help="Write a local pricing template")
     pricing.add_argument("--output", type=Path, default=DEFAULT_PRICING_PATH)
     pricing.add_argument("--force", action="store_true")
+
+    update_pricing = subparsers.add_parser(
+        "update-pricing", help="Fetch OpenAI text-token pricing into the local config"
+    )
+    update_pricing.add_argument("--output", type=Path, default=None)
+    update_pricing.add_argument("--source", choices=["openai-docs"], default="openai-docs")
+    update_pricing.add_argument("--tier", choices=VALID_PRICING_TIERS, default="standard")
+    update_pricing.add_argument("--source-url", default=OPENAI_PRICING_MD_URL)
 
     args = parser.parse_args()
 
@@ -176,6 +187,20 @@ def main() -> int:
     if args.command == "init-pricing":
         output = write_pricing_template(args.output, force=args.force)
         print(f"Wrote local pricing template to {output}")
+        return 0
+
+    if args.command == "update-pricing":
+        output = args.output or args.pricing
+        result = update_pricing_from_openai_docs(
+            output,
+            tier=args.tier,
+            source_url=args.source_url,
+        )
+        print(
+            f"Wrote {result.model_count} {result.tier} pricing entries from "
+            f"{result.source_url} to {result.path}"
+            + (f" (backup: {result.backup_path})" if result.backup_path else "")
+        )
         return 0
 
     parser.error("unknown command")

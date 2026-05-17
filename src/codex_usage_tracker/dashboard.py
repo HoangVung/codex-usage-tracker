@@ -23,7 +23,11 @@ def generate_dashboard(
     rows = annotate_rows_with_efficiency(rows, pricing)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(
-        {"rows": rows, "pricing_configured": pricing.loaded and not pricing.error},
+        {
+            "rows": rows,
+            "pricing_configured": pricing.loaded and not pricing.error,
+            "pricing_source": pricing.source,
+        },
         ensure_ascii=True,
     ).replace("</", "<\\/")
     output_path.write_text(_html(payload), encoding="utf-8")
@@ -67,6 +71,7 @@ def _html(payload: str) -> str:
     }}
     h1 {{ margin: 0 0 6px; font-size: 24px; font-weight: 720; }}
     header p {{ margin: 0; color: var(--muted); max-width: 920px; line-height: 1.45; }}
+    .source-line {{ margin-top: 6px; font-size: 12px; }}
     main {{ padding: 22px 28px 36px; }}
     .filters {{
       display: grid;
@@ -174,6 +179,7 @@ def _html(payload: str) -> str:
   <header>
     <h1>Codex Usage Dashboard</h1>
     <p>Aggregate-only token analytics from local Codex logs. Hover a table row to inspect exact last-call and cumulative usage without exposing raw chat text.</p>
+    <p id="pricingSource" class="source-line"></p>
   </header>
   <main>
     <div class="filters">
@@ -212,6 +218,7 @@ def _html(payload: str) -> str:
     const payload = JSON.parse(document.getElementById('usage-data').textContent);
     const data = Array.isArray(payload) ? payload : payload.rows;
     const pricingConfigured = Boolean(payload.pricing_configured);
+    const pricingSource = payload.pricing_source || {{}};
     const rowsEl = document.getElementById('rows');
     const detailEl = document.getElementById('detail');
     const searchEl = document.getElementById('search');
@@ -248,6 +255,14 @@ def _html(payload: str) -> str:
     }}
     optionize(modelEl, data.map(row => row.model));
     optionize(effortEl, data.map(row => row.effort));
+    if (pricingConfigured && pricingSource.url) {{
+      const sourceParts = [
+        pricingSource.name || 'Pricing source',
+        pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
+        pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
+      ].filter(Boolean);
+      document.getElementById('pricingSource').textContent = `Estimated costs use ${{sourceParts.join(', ')}}.`;
+    }}
     function filtered() {{
       const term = searchEl.value.trim().toLowerCase();
       const model = modelEl.value;

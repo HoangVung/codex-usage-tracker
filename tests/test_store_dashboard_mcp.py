@@ -5,7 +5,11 @@ from pathlib import Path
 
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
-from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
+from codex_usage_tracker.pricing import (
+    PricingUpdateResult,
+    annotate_rows_with_efficiency,
+    load_pricing_config,
+)
 from codex_usage_tracker.store import (
     export_usage_csv,
     query_most_expensive_calls,
@@ -72,6 +76,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(mcp_server, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_DASHBOARD_PATH", dashboard_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_PRICING_PATH", pricing_path)
+    monkeypatch.setattr(mcp_server, "update_pricing_from_openai_docs", _fake_pricing_update)
 
     refresh = mcp_server.refresh_usage_index()
     summary = mcp_server.usage_summary(group_by="thread")
@@ -79,6 +84,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     expensive = mcp_server.most_expensive_usage_calls(limit=1)
     session = mcp_server.session_usage(session_id=SESSION_ID)
     dashboard = mcp_server.generate_usage_dashboard()
+    pricing_update = mcp_server.update_usage_pricing_config()
     doctor = mcp_server.usage_doctor()
 
     assert refresh["parsed_events"] == 2
@@ -87,6 +93,8 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert "Most expensive Codex calls" in expensive
     assert SESSION_ID in session
     assert dashboard["dashboard_path"] == str(dashboard_path)
+    assert pricing_update["model_count"] == 1
+    assert pricing_update["source_url"] == "https://example.test/pricing.md"
     assert "Codex Usage Tracker doctor" in doctor
 
 
@@ -202,6 +210,17 @@ def _write_pricing(path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _fake_pricing_update(path: Path, tier: str = "standard") -> PricingUpdateResult:
+    return PricingUpdateResult(
+        path=path,
+        source_url="https://example.test/pricing.md",
+        tier=tier,
+        fetched_at="2026-05-17T00:00:00+00:00",
+        model_count=1,
+        backup_path=None,
+    )
 
 
 def _token_event(cumulative_total: int, last_total: int) -> dict[str, object]:

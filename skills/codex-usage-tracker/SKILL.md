@@ -21,4 +21,5 @@ The tracker is aggregate-only. It should never return prompts, assistant message
 - Use `most_expensive_usage_calls` to identify high-token calls and aggregate efficiency signals.
 - Use `generate_usage_dashboard` when the user wants a visual hoverable report.
 - Use `export_usage_csv` when the user wants local spreadsheet-friendly data.
-- Use `init_usage_pricing_config` only when the user wants optional local cost estimates; the user must fill in current model rates.
+- Use `update_usage_pricing_config` when the user wants cost estimates based on OpenAI-published text-token pricing. This refreshes the local pricing cache and does not send local usage data anywhere.
+- Use `init_usage_pricing_config` only when the user wants a manual local pricing template or override file.

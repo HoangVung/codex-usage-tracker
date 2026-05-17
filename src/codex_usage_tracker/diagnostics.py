@@ -163,12 +163,16 @@ def _check_pricing(pricing_path: Path) -> DoctorCheck:
             "Pricing config",
             "warn",
             f"No local pricing config found: {pricing_path}",
-            "Cost estimates are disabled until you run: codex-usage-tracker init-pricing",
+            "Cost estimates are disabled until you run: codex-usage-tracker update-pricing",
         )
+    source = config.source or {}
+    source_url = source.get("url")
+    tier = source.get("tier")
+    source_detail = f" Source: {source_url} ({tier})." if source_url and tier else ""
     return DoctorCheck(
         "Pricing config",
         "pass",
-        f"Loaded {len(config.models)} local model pricing entries from {pricing_path}.",
+        f"Loaded {len(config.models)} local model pricing entries from {pricing_path}.{source_detail}",
     )
 
 

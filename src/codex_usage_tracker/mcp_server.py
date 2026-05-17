@@ -20,6 +20,7 @@ from codex_usage_tracker.paths import (
 from codex_usage_tracker.pricing import (
     annotate_rows_with_efficiency,
     load_pricing_config,
+    update_pricing_from_openai_docs,
     write_pricing_template,
 )
 from codex_usage_tracker.store import (
@@ -135,6 +136,21 @@ def init_usage_pricing_config(force: bool = False) -> dict[str, Any]:
 
     output = write_pricing_template(DEFAULT_PRICING_PATH, force=force)
     return {"pricing_path": str(output)}
+
+
+@mcp.tool()
+def update_usage_pricing_config(tier: str = "standard") -> dict[str, Any]:
+    """Fetch OpenAI-published text-token pricing into the local pricing config."""
+
+    result = update_pricing_from_openai_docs(DEFAULT_PRICING_PATH, tier=tier)
+    return {
+        "pricing_path": str(result.path),
+        "source_url": result.source_url,
+        "tier": result.tier,
+        "fetched_at": result.fetched_at,
+        "model_count": result.model_count,
+        "backup_path": str(result.backup_path) if result.backup_path else None,
+    }
 
 
 def _resolve_summary_options(

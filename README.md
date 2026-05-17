@@ -10,7 +10,7 @@ Local Codex plugin and dashboard for tracking aggregate token usage from Codex s
 - Exposes MCP tools for refresh, summaries, session detail, CSV export, and dashboard generation.
 - Generates a static hoverable dashboard for local review.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
-- Optionally estimates costs from a user-maintained local pricing file.
+- Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
 
 The tracker intentionally does not store prompts, assistant messages, tool outputs, pasted secrets, or raw transcript snippets.
 
@@ -70,10 +70,18 @@ codex-usage-tracker export --output usage.csv
 Enable optional cost estimates:
 
 ```bash
+codex-usage-tracker update-pricing
+```
+
+This fetches OpenAI text-token pricing from `https://developers.openai.com/api/docs/pricing.md`, parses the selected tier, and writes a source-stamped local cache to `~/.codex-usage-tracker/pricing.json`. The default tier is `standard`; other supported tiers are `batch`, `flex`, and `priority`. If a pricing file already exists, the updater leaves a timestamped `.bak` copy next to it before replacing the active cache.
+
+For a manual template instead:
+
+```bash
 codex-usage-tracker init-pricing
 ```
 
-Edit `~/.codex-usage-tracker/pricing.json` with current USD-per-million-token rates for the models you want to estimate. The tracker does not fetch pricing automatically because prices change and the config should remain local and explicit.
+Edit `~/.codex-usage-tracker/pricing.json` with USD-per-million-token rates for any local overrides or models that are not present in the OpenAI pricing table. Normal reports never contact the network; only `update-pricing` refreshes the local pricing cache.
 
 ## Install As A Local Codex Plugin
 
@@ -95,6 +103,7 @@ Restart Codex after registration so it can discover the plugin. The installer sy
 - `generate_usage_dashboard`
 - `export_usage_csv`
 - `init_usage_pricing_config`
+- `update_usage_pricing_config`
 
 ## Data Privacy
 
@@ -106,13 +115,14 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 
 Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database or dashboard.
 
-Cost estimates are calculated only from aggregate token fields and your local pricing config. They are omitted when no matching model price is configured.
+Cost estimates are calculated only from aggregate token fields and your local pricing config. They are omitted when no matching model price is configured. Pricing refreshes pull only OpenAI's public pricing markdown and do not send local usage data anywhere.
 
 ## Test
 
 ```bash
 python -m pytest
 python -m compileall src
+codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker expensive --limit 5
