@@ -6,7 +6,7 @@ import json
 import re
 import shutil
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 from urllib.error import URLError
@@ -184,7 +184,7 @@ def update_pricing_from_openai_docs(
         models.update(_estimated_model_prices())
         estimated_model_count = len(ESTIMATED_MODEL_PRICES)
 
-    fetched_at = datetime.now(UTC).replace(microsecond=0).isoformat()
+    fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     payload = {
         "_schema": PRICING_SCHEMA,
         "_source": {
@@ -491,7 +491,7 @@ def _fetch_text(url: str) -> str:
 def _backup_existing_pricing(path: Path) -> Path | None:
     if not path.exists():
         return None
-    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     backup_path = path.with_name(f"{path.name}.{stamp}.bak")
     shutil.copy2(path, backup_path)
     return backup_path

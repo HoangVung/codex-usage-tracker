@@ -5,7 +5,7 @@ from __future__ import annotations
 import csv
 import sqlite3
 from collections.abc import Iterable
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -201,7 +201,7 @@ def record_refresh_metadata(
     """Record the latest refresh counters in refresh_meta."""
 
     values = {
-        "latest_refresh_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "latest_refresh_at": datetime.now(timezone.utc).replace(microsecond=0).isoformat(),
         "scanned_files": str(scanned_files),
         "parsed_events": str(parsed_events),
         "skipped_events": str(skipped_events),

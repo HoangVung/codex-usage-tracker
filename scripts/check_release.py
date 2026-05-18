@@ -8,9 +8,13 @@ import json
 import re
 import subprocess
 import sys
-import tomllib
 import zipfile
 from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10.
+    import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SECRET_PATTERNS = {
