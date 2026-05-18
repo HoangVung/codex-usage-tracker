@@ -243,6 +243,13 @@ def _html(payload: str) -> str:
       overflow: hidden;
       box-shadow: var(--shadow);
     }}
+    .detail-section {{
+      position: sticky;
+      top: 14px;
+      max-height: calc(100dvh - 28px);
+      display: flex;
+      flex-direction: column;
+    }}
     section h2 {{
       margin: 0;
       padding: 14px 16px;
@@ -356,6 +363,22 @@ def _html(payload: str) -> str:
       opacity: 0.55;
     }}
     .num {{ text-align: right; font-variant-numeric: tabular-nums; }}
+    .time-cell {{
+      display: grid;
+      gap: 2px;
+      min-width: 104px;
+      line-height: 1.2;
+    }}
+    .time-date {{
+      color: var(--ink);
+      font-weight: 680;
+      white-space: nowrap;
+    }}
+    .time-clock {{
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }}
     .pill {{
       display: inline-flex;
       align-items: center;
@@ -459,8 +482,10 @@ def _html(payload: str) -> str:
       text-align: center;
     }}
     .detail {{
+      flex: 1 1 auto;
       padding: 14px 16px;
       min-height: 280px;
+      overflow: auto;
       color: var(--muted);
       line-height: 1.45;
     }}
@@ -528,6 +553,8 @@ def _html(payload: str) -> str:
       th, td {{ padding: 8px; }}
       .header-main {{ flex-direction: column; }}
       .live-bar {{ justify-content: flex-start; width: 100%; }}
+      .detail-section {{ position: static; max-height: none; }}
+      .detail {{ max-height: none; }}
       .table-tools {{ align-items: stretch; flex-direction: column; }}
       .segmented, .segmented button {{ width: 100%; }}
       .pager, .load-control {{ justify-content: space-between; width: 100%; }}
@@ -610,7 +637,7 @@ def _html(payload: str) -> str:
           <tbody id="rows"></tbody>
         </table>
       </section>
-      <section>
+      <section class="detail-section">
         <h2>Call Details</h2>
         <div id="detail" class="detail">Hover or click a row to inspect aggregate usage fields.</div>
       </section>
@@ -644,6 +671,17 @@ def _html(payload: str) -> str:
     const nextPageEl = document.getElementById('nextPage');
     const pageStatusEl = document.getElementById('pageStatus');
     const number = new Intl.NumberFormat();
+    const tableDateFormat = new Intl.DateTimeFormat([], {{ month: 'short', day: 'numeric', year: 'numeric' }});
+    const tableTimeFormat = new Intl.DateTimeFormat([], {{ hour: 'numeric', minute: '2-digit', second: '2-digit' }});
+    const detailDateTimeFormat = new Intl.DateTimeFormat([], {{
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      second: '2-digit',
+      timeZoneName: 'short',
+    }});
     let rowByRecordId = new Map();
     let parentCandidates = {{ bySession: new Map(), byCwd: new Map() }};
     let threadAttachmentByRecordId = new Map();
@@ -678,6 +716,29 @@ def _html(payload: str) -> str:
       const text = short(value, '');
       return text.length > size ? `${{text.slice(0, size - 1)}}…` : text;
     }};
+    function parsedTimestamp(value) {{
+      if (!value) return null;
+      const date = new Date(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }}
+    function formatTimestamp(value, fallback = 'Unknown') {{
+      const date = parsedTimestamp(value);
+      return date ? detailDateTimeFormat.format(date) : short(value, fallback);
+    }}
+    function formatTimestampTitle(value) {{
+      const formatted = formatTimestamp(value, '');
+      return [formatted, value].filter(Boolean).join(' - ');
+    }}
+    function renderTimeCell(value) {{
+      const date = parsedTimestamp(value);
+      if (!date) return escapeHtml(truncate(value, 20));
+      return `
+        <span class="time-cell" title="${{escapeHtml(formatTimestampTitle(value))}}">
+          <span class="time-date">${{escapeHtml(tableDateFormat.format(date))}}</span>
+          <span class="time-clock">${{escapeHtml(tableTimeFormat.format(date))}}</span>
+        </span>
+      `;
+    }}
     function defaultSortDirection(key) {{
       return {{
         cache: 'asc',
@@ -1190,7 +1251,7 @@ def _html(payload: str) -> str:
         tr.setAttribute('role', 'button');
         tr.setAttribute('aria-label', `Inspect ${{rowThreadLabel(row)}} usage`);
         tr.innerHTML = `
-          <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
+          <td>${{renderTimeCell(row.event_timestamp)}}</td>
           <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(rowThreadLabel(row)))}}</td>
           <td><span class="pill">${{escapeHtml(short(row.model))}}</span></td>
           <td>${{escapeHtml(short(row.effort))}}</td>
@@ -1250,7 +1311,7 @@ def _html(payload: str) -> str:
         tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
         tr.setAttribute('aria-label', `${{expanded ? 'Collapse' : 'Expand'}} ${{group.label}} calls`);
         tr.innerHTML = `
-          <td>${{escapeHtml(truncate(group.latestActivity, 20))}}</td>
+          <td>${{renderTimeCell(group.latestActivity)}}</td>
           <td>
             <div class="thread-title">
                 <span class="thread-toggle" aria-hidden="true">${{expanded ? '-' : '+'}}</span>
@@ -1303,7 +1364,7 @@ def _html(payload: str) -> str:
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
         return `
           <tr class="thread-call-row" tabindex="0" role="button" data-record-id="${{escapeHtml(row.record_id || '')}}">
-            <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
+            <td>${{renderTimeCell(row.event_timestamp)}}</td>
             <td>${{escapeHtml(short(row.model))}}</td>
             <td>${{escapeHtml(short(row.effort))}}</td>
             <td>${{escapeHtml(sourceLabel(row))}}</td>
@@ -1387,7 +1448,7 @@ def _html(payload: str) -> str:
         <div class="context-entry">
           <div class="context-entry-header">
             <span>${{escapeHtml(entry.label || entry.type || 'entry')}}</span>
-            <span>${{escapeHtml([entry.timestamp, entry.line_number ? `line ${{entry.line_number}}` : ''].filter(Boolean).join(' - '))}}</span>
+            <span>${{escapeHtml([formatTimestamp(entry.timestamp, ''), entry.line_number ? `line ${{entry.line_number}}` : ''].filter(Boolean).join(' - '))}}</span>
           </div>
           <pre>${{escapeHtml(entry.text || '')}}</pre>
         </div>
@@ -1406,9 +1467,9 @@ def _html(payload: str) -> str:
         ['Agent nickname', row.agent_nickname || 'None'],
         ['Parent session', row.parent_session_id || 'None'],
         ['Parent thread', resolvedParentThreadName(row) || 'None'],
-        ['Parent updated', resolvedParentSessionUpdatedAt(row) || 'None'],
+        ['Parent updated', resolvedParentSessionUpdatedAt(row) ? formatTimestamp(resolvedParentSessionUpdatedAt(row)) : 'None'],
         ['Turn', row.turn_id],
-        ['Timestamp', row.event_timestamp],
+        ['Timestamp', formatTimestamp(row.event_timestamp)],
         ['Model', row.model],
         ['Reasoning', row.effort],
         ['Cwd', row.cwd],
@@ -1434,7 +1495,7 @@ def _html(payload: str) -> str:
     function showThreadDetail(group) {{
       const fields = [
         ['Thread', group.label],
-        ['Latest activity', group.latestActivity],
+        ['Latest activity', formatTimestamp(group.latestActivity)],
         ['Calls', number.format(group.callCount)],
         ['Total tokens', number.format(group.totalTokens)],
         ['Estimated cost', pricingConfigured ? money(group.estimatedCost) : 'Not configured'],

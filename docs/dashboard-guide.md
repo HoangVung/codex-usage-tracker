@@ -33,8 +33,9 @@ The dashboard opens in `Calls` view. This is the most direct way to inspect indi
 - The header stays compact: refresh controls on the right, aggregate/privacy status on the left.
 - Search matches thread, cwd, model, session id, turn id, subagent role, and parent thread fields.
 - The cards summarize only the currently visible filtered rows.
+- Time values are shown in your browser's local date/time format while sorting still uses the logged timestamp.
 - Click a column header like `Time`, `Thread`, `Tokens`, `Cost`, or `Cache` to sort. Click the same header again to reverse the direction.
-- Hover or click a row to pin its aggregate fields in `Call Details`.
+- Hover or click a row to pin its aggregate fields in `Call Details`; on desktop, the details panel stays visible as you scroll.
 
 Useful interpretation notes:
 
@@ -61,7 +62,7 @@ The same filters, pricing status, load limit, cards, and sort controls apply in 
 
 ![Details panel showing aggregate fields for the selected usage row.](assets/dashboard-details.png)
 
-The details panel is intentionally field-heavy so the table can stay compact.
+The details panel is intentionally field-heavy so the table can stay compact. On desktop, it sticks inside the viewport and scrolls internally when the selected call has more fields or loaded context than can fit on screen.
 
 For selected calls, the panel shows:
 

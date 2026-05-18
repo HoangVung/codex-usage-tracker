@@ -98,6 +98,9 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Aggregate only" in dashboard
     assert "Call Details" in dashboard
     assert "Dashboard guide" in dashboard
+    assert "detail-section" in dashboard
+    assert "time-cell" in dashboard
+    assert "formatTimestamp" in dashboard
     assert "Live ·" in dashboard
     assert "loadLimit" in dashboard
     assert "pager" in dashboard
