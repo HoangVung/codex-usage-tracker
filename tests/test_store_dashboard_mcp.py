@@ -108,6 +108,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Live ·" in dashboard
     assert "loadLimit" in dashboard
     assert "pager" in dashboard
+    assert "pagerEl.hidden = !shouldShowPager" in dashboard
+    assert "updatePager(page, 'threads')" in dashboard
     assert "All calls" in dashboard
     assert "/api/usage" in dashboard
     assert 'data-sort-key="time"' in dashboard

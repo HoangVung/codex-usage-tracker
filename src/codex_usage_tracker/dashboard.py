@@ -301,8 +301,8 @@ def _html(payload: str) -> str:
       font-size: 11px;
     }}
     .table-tools {{
-      display: flex;
-      justify-content: space-between;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr) auto;
       align-items: center;
       gap: 12px;
       padding: 12px 16px;
@@ -334,6 +334,7 @@ def _html(payload: str) -> str:
       box-shadow: 0 1px 4px rgba(23, 32, 51, 0.12);
     }}
     .table-caption {{
+      min-width: 0;
       color: var(--muted);
       font-size: 12px;
       font-weight: 680;
@@ -341,10 +342,15 @@ def _html(payload: str) -> str:
     .pager {{
       display: inline-flex;
       align-items: center;
+      justify-content: flex-end;
       gap: 8px;
       color: var(--muted);
       font-size: 12px;
       font-weight: 680;
+      white-space: nowrap;
+    }}
+    .pager[hidden] {{
+      display: none;
     }}
     .pager-button {{
       min-height: 30px;
@@ -592,7 +598,7 @@ def _html(payload: str) -> str:
       .live-bar {{ justify-content: flex-start; width: 100%; }}
       .detail-section {{ position: static; max-height: none; }}
       .detail {{ max-height: none; }}
-      .table-tools {{ align-items: stretch; flex-direction: column; }}
+      .table-tools {{ align-items: stretch; grid-template-columns: 1fr; }}
       .segmented, .segmented button {{ width: 100%; }}
       .pager, .load-control {{ justify-content: space-between; width: 100%; }}
     }}
@@ -708,6 +714,7 @@ def _html(payload: str) -> str:
     const prevPageEl = document.getElementById('prevPage');
     const nextPageEl = document.getElementById('nextPage');
     const pageStatusEl = document.getElementById('pageStatus');
+    const pagerEl = document.getElementById('pager');
     const toTopEl = document.getElementById('toTop');
     const number = new Intl.NumberFormat();
     const tableDateFormat = new Intl.DateTimeFormat([], {{ month: 'short', day: 'numeric', year: 'numeric' }});
@@ -1264,14 +1271,16 @@ def _html(payload: str) -> str:
         pageCount,
       }};
     }}
-    function updatePager(page) {{
+    function updatePager(page, itemLabel = 'rows') {{
+      const shouldShowPager = page.pageCount > 1;
+      pagerEl.hidden = !shouldShowPager;
       prevPageEl.disabled = currentPage <= 1;
       nextPageEl.disabled = currentPage >= page.pageCount;
       if (!page.total) {{
         pageStatusEl.textContent = 'No rows';
         return;
       }}
-      pageStatusEl.textContent = `Page ${{number.format(currentPage)}} of ${{number.format(page.pageCount)}} · ${{number.format(page.start + 1)}}-${{number.format(page.end)}} of ${{number.format(page.total)}}`;
+      pageStatusEl.textContent = `${{number.format(page.start + 1)}}-${{number.format(page.end)}} of ${{number.format(page.total)}} ${{itemLabel}} · page ${{number.format(currentPage)}}/${{number.format(page.pageCount)}}`;
     }}
     function render() {{
       const rows = filtered();
@@ -1301,7 +1310,7 @@ def _html(payload: str) -> str:
     }}
     function renderCalls(rows) {{
       const page = paginate(rows);
-      updatePager(page);
+      updatePager(page, 'calls');
       tableTitleEl.textContent = 'Model Calls';
       tableCaptionEl.textContent = `Showing individual model calls sorted by ${{tableCaptionEl.dataset.sortDescription}}. ${{loadedRowsDescription()}}.`;
       for (const row of page.items) {{
@@ -1351,7 +1360,7 @@ def _html(payload: str) -> str:
         initialThreadExpansionApplied = true;
       }}
       const page = paginate(groups);
-      updatePager(page);
+      updatePager(page, 'threads');
       tableTitleEl.textContent = 'Threads';
       tableCaptionEl.textContent = `Showing ${{number.format(groups.length)}} threads from ${{number.format(rows.length)}} filtered calls, sorted by ${{tableCaptionEl.dataset.sortDescription}}. ${{loadedRowsDescription()}}. Click a thread to expand its calls.`;
       for (const group of page.items) {{

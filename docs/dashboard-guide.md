@@ -36,6 +36,7 @@ The dashboard opens in `Calls` view. This is the most direct way to inspect indi
 - Time values are shown in your browser's local date/time format while sorting still uses the logged timestamp.
 - Click a column header like `Time`, `Thread`, `Tokens`, `Cost`, or `Cache` to sort. Click the same header again to reverse the direction.
 - Hover or click a row to pin its aggregate fields in `Call Details`; on desktop, the details panel stays visible as you scroll.
+- Pagination appears only when the active Calls or Threads view has more than one page.
 - After you scroll down, the bottom-right `Top` button returns to the top of the dashboard.
 
 Useful interpretation notes:

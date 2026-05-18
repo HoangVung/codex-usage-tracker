@@ -11,6 +11,7 @@
 - Tighten the dashboard header copy, add click/keyboard row inspection, and keep detailed usage guidance out of the primary UI.
 - Keep call details sticky while scrolling and render timestamps as local human-readable date/time values.
 - Prefer non-review models in mixed thread model summaries, add fit-to-width model labels, and add a scroll-aware `Top` button.
+- Hide single-page dashboard pagination and keep multi-page controls compact in the toolbar.
 - Add a screenshot-driven dashboard guide built from synthetic aggregate fixture data.
 - Preserve requested virtualenv Python paths during plugin install instead of resolving through interpreter symlinks.
 - Keep generated dashboards, SQLite databases, CSV exports, and raw Codex logs out of git.
