@@ -6,6 +6,16 @@ Local-first analytics for Codex token usage.
 
 Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggregate usage counters into SQLite, and gives you a dashboard, CLI, and MCP tools for understanding where tokens are going. It is built for investigating real usage patterns while keeping prompts, assistant messages, tool output, and pasted secrets out of the stored index and generated dashboard HTML.
 
+## Dashboard Preview
+
+![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png)
+
+![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
+
+![Call Details panel showing aggregate token, pricing, context, and thread attachment fields.](docs/assets/dashboard-details.png)
+
+These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content.
+
 ## Why Use It
 
 Use this when you want to answer questions like:
@@ -22,16 +32,6 @@ The dashboard is intentionally split into two views:
 
 - `Calls`: inspect individual model calls, token fields, pricing status, cache ratio, reasoning output, and context-window percentage.
 - `Threads`: group calls by Codex thread, expand a thread chronologically, and see spawned subagents and inferred auto-review work in context.
-
-## Dashboard Preview
-
-These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content.
-
-![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png)
-
-![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
-
-![Call Details panel showing aggregate token, pricing, context, and thread attachment fields.](docs/assets/dashboard-details.png)
 
 ## Important Pattern: Long Chats Can Bloat Fast
 
