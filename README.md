@@ -2,8 +2,6 @@
 
 Local-first analytics for Codex token usage.
 
-[![Mentioned in Awesome Codex CLI](https://awesome.re/mentioned-badge.svg)](https://github.com/RoggeOhta/awesome-codex-cli)
-
 > **Unofficial project:** Codex Usage Tracker is an independent open-source project. It is not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI. OpenAI and Codex are trademarks of OpenAI; this project only reads local log files from your machine.
 
 Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggregate usage counters into SQLite, and gives you a dashboard, CLI, and MCP tools for understanding where tokens are going. It is built for investigating real usage patterns while keeping prompts, assistant messages, tool output, and pasted secrets out of the stored index and generated dashboard HTML.
