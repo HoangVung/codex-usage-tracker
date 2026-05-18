@@ -95,8 +95,10 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "explicit parent thread" in dashboard
     assert "spawned from" in dashboard
     assert "spawned threads" in dashboard
-    assert "Refresh now" in dashboard
-    assert "Live updates" in dashboard
+    assert "Aggregate only" in dashboard
+    assert "Call Details" in dashboard
+    assert "Dashboard guide" in dashboard
+    assert "Live ·" in dashboard
     assert "loadLimit" in dashboard
     assert "pager" in dashboard
     assert "All calls" in dashboard

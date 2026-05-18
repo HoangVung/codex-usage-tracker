@@ -73,6 +73,8 @@ codex-usage-tracker dashboard --open
 codex-usage-tracker open-dashboard
 ```
 
+For a screenshot-driven walkthrough of the dashboard, see [`docs/dashboard-guide.md`](docs/dashboard-guide.md).
+
 The dashboard opens in the flat Calls view sorted newest-first. Use the Calls/Threads toggle to group filtered usage by thread, with the most recently active thread at the top by default. In the default newest-first Threads view, spawned child threads are shown directly under their parent thread when both are visible. Parent rows show spawned-thread counts, and child rows show `spawned from ...`. Click a column header such as Time, Thread, Model, Effort, Tokens, Cost, Cache, or Signals to sort that view; clicking the same header toggles direction. Click a thread row to expand its calls in chronological order. Spawned subagents with a logged parent session are latched to the parent thread from `session_index.jsonl`, and the dashboard falls back to an in-database parent-session lookup when needed. Guardian `codex-auto-review` sessions do not currently log a parent session id, so the dashboard attaches them to the nearest named thread with the same cwd and marks that attachment as inferred.
 
 Serve the dashboard with live aggregate refresh and lazy raw-context loading:
@@ -81,7 +83,7 @@ Serve the dashboard with live aggregate refresh and lazy raw-context loading:
 codex-usage-tracker serve-dashboard --open
 ```
 
-When served this way, the dashboard gets a `Refresh now` button plus live updates that poll the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
+When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle that polls the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
 
 Show a summary:
 

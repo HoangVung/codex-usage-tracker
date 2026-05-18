@@ -24,6 +24,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `scripts/install_local_plugin.py` - compatibility wrapper around `codex-usage-tracker install-plugin`.
 - `scripts/check_release.py` - release-readiness checks for docs, versions, packaging, wheel contents, and tracked secret patterns.
 - `.github/workflows/ci.yml` - GitHub Actions test and package build workflow.
+- `docs/dashboard-guide.md` and `docs/assets/` - screenshot-driven dashboard usage guide built from synthetic aggregate fixture data.
 - `tests/` - synthetic fixtures and unit tests.
 
 ## Setup
@@ -76,6 +77,7 @@ codex-usage-tracker expensive --limit 5
 - `scripts/check_release.py --dist` passes before any public release.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
+- Dashboard usage docs are updated when the visible dashboard workflow changes, and screenshots must be generated from synthetic data only.
 - Dashboard aggregate refresh is localhost-only and keeps generated HTML aggregate-only; context loading is lazy, localhost-only, explicit, redacted, and not embedded in the static HTML payload.
 - Subagent calls preserve logged parent-session metadata, latch to parent thread labels when available, and auto-review attachment is clearly marked when inferred.
 - Tests and compile checks pass.

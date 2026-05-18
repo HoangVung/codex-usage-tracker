@@ -92,19 +92,59 @@ def _html(payload: str) -> str:
       color: var(--ink);
     }}
     header {{
-      padding: 24px 28px 16px;
+      padding: 18px 28px 14px;
       border-bottom: 1px solid var(--line);
       background: var(--panel);
     }}
-    h1 {{ margin: 0 0 6px; font-size: 24px; font-weight: 720; }}
-    header p {{ margin: 0; color: var(--muted); max-width: 920px; line-height: 1.45; }}
-    .source-line {{ margin-top: 6px; font-size: 12px; }}
+    .header-main {{
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+    }}
+    .eyebrow {{
+      margin: 0 0 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 780;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }}
+    h1 {{ margin: 0; font-size: 23px; font-weight: 760; letter-spacing: 0; }}
+    .header-meta {{
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      margin-top: 11px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 680;
+    }}
+    .status-chip {{
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 2px 8px;
+      border: 1px solid #c7d2fe;
+      border-radius: 999px;
+      background: #eef2ff;
+      color: #3346a3;
+      font-weight: 760;
+    }}
+    .source-line {{ color: var(--muted); }}
+    .guide-link {{
+      color: var(--blue);
+      font-weight: 760;
+      text-decoration: none;
+    }}
+    .guide-link:hover {{ text-decoration: underline; }}
     .live-bar {{
       display: flex;
       flex-wrap: wrap;
       align-items: center;
       gap: 10px;
-      margin-top: 12px;
+      justify-content: flex-end;
     }}
     .refresh-button {{
       min-height: 34px;
@@ -213,6 +253,16 @@ def _html(payload: str) -> str:
     th, td {{ padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }}
     th {{ color: var(--muted); font-size: 12px; background: #fbfcfe; position: sticky; top: 0; }}
     tr:hover {{ background: #eff6ff; }}
+    .call-row {{
+      cursor: pointer;
+    }}
+    .call-row:focus-visible,
+    .thread-row:focus-visible,
+    .thread-call-row:focus-visible {{
+      outline: 2px solid var(--blue);
+      outline-offset: -2px;
+      background: #eff6ff;
+    }}
     button {{
       font: inherit;
     }}
@@ -476,6 +526,8 @@ def _html(payload: str) -> str:
       main, header {{ padding-left: 16px; padding-right: 16px; }}
       table {{ font-size: 12px; }}
       th, td {{ padding: 8px; }}
+      .header-main {{ flex-direction: column; }}
+      .live-bar {{ justify-content: flex-start; width: 100%; }}
       .table-tools {{ align-items: stretch; flex-direction: column; }}
       .segmented, .segmented button {{ width: 100%; }}
       .pager, .load-control {{ justify-content: space-between; width: 100%; }}
@@ -484,21 +536,29 @@ def _html(payload: str) -> str:
 </head>
 <body>
   <header>
-    <h1>Codex Usage Dashboard</h1>
-    <p>Aggregate-only token analytics from local Codex logs. Hover a table row to inspect exact usage fields; raw logged context is loaded only on demand from the local dashboard server.</p>
-    <p id="pricingSource" class="source-line"></p>
-    <div class="live-bar">
-      <button id="refreshDashboard" class="refresh-button" type="button">Refresh now</button>
-      <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live updates</label>
-      <label class="load-control">Load
-        <select id="loadLimit">
-          <option value="5000">5,000 calls</option>
-          <option value="10000">10,000 calls</option>
-          <option value="20000">20,000 calls</option>
-          <option value="all">All calls</option>
-        </select>
-      </label>
+    <div class="header-main">
+      <div>
+        <p class="eyebrow">Local Codex analytics</p>
+        <h1>Usage Dashboard</h1>
+      </div>
+      <div class="live-bar" aria-label="Dashboard refresh controls">
+        <button id="refreshDashboard" class="refresh-button" type="button">Refresh</button>
+        <label class="live-toggle"><input id="autoRefresh" type="checkbox" checked> Live</label>
+        <label class="load-control">Load
+          <select id="loadLimit">
+            <option value="5000">5,000 calls</option>
+            <option value="10000">10,000 calls</option>
+            <option value="20000">20,000 calls</option>
+            <option value="all">All calls</option>
+          </select>
+        </label>
+      </div>
+    </div>
+    <div class="header-meta">
+      <span class="status-chip">Aggregate only</span>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
+      <span id="pricingSource" class="source-line"></span>
+      <a class="guide-link" href="https://github.com/douglasmonsky/codex-usage-tracker/blob/main/docs/dashboard-guide.md">Dashboard guide</a>
     </div>
   </header>
   <main>
@@ -551,14 +611,15 @@ def _html(payload: str) -> str:
         </table>
       </section>
       <section>
-        <h2>Hover Details</h2>
-        <div id="detail" class="detail">Hover a row to inspect aggregate usage fields.</div>
+        <h2>Call Details</h2>
+        <div id="detail" class="detail">Hover or click a row to inspect aggregate usage fields.</div>
       </section>
     </div>
   </main>
   <script id="usage-data" type="application/json">{payload}</script>
   <script>
     const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
+    const urlParams = new URLSearchParams(window.location.search);
     let data = payloadRows(initialPayload);
     let pricingConfigured = Boolean(initialPayload.pricing_configured);
     let pricingSource = initialPayload.pricing_source || {{}};
@@ -590,12 +651,14 @@ def _html(payload: str) -> str:
     const liveRefreshSupported = window.location.protocol !== 'file:';
     const liveRefreshIntervalMs = 10000;
     const pageSize = 500;
-    let activeView = 'calls';
+    let activeView = urlParams.get('view') === 'threads' ? 'threads' : 'calls';
     let sortKey = sortEl.value || 'time';
     let sortDirection = defaultSortDirection(sortKey);
     let refreshInFlight = false;
     let autoRefreshTimer = null;
     let currentPage = 1;
+    let initialThreadExpansionApplied = false;
+    let initialDetailApplied = false;
     const money = (value, missingLabel = 'No price') => {{
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -739,9 +802,11 @@ def _html(payload: str) -> str:
           pricingSource.tier ? `${{pricingSource.tier}} tier` : '',
           pricingSource.fetched_at ? `fetched ${{pricingSource.fetched_at}}` : '',
         ].filter(Boolean);
-        sourceEl.textContent = `Estimated costs use ${{sourceParts.join(', ')}}; internal Codex labels may use marked best-guess estimates.`;
+        sourceEl.textContent = `Costs: ${{sourceParts.join(' · ')}}`;
+        sourceEl.title = 'Internal Codex labels may use marked best-guess estimates.';
       }} else {{
-        sourceEl.textContent = pricingConfigured ? '' : 'Estimated costs are unavailable until pricing is configured.';
+        sourceEl.textContent = pricingConfigured ? '' : 'Costs unavailable';
+        sourceEl.title = pricingConfigured ? '' : 'Run codex-usage-tracker update-pricing to configure estimated costs.';
       }}
     }}
     function filtered() {{
@@ -1120,6 +1185,10 @@ def _html(payload: str) -> str:
       for (const row of page.items) {{
         const tr = document.createElement('tr');
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
+        tr.className = 'call-row';
+        tr.tabIndex = 0;
+        tr.setAttribute('role', 'button');
+        tr.setAttribute('aria-label', `Inspect ${{rowThreadLabel(row)}} usage`);
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
           <td title="${{escapeHtml(short(row.session_id))}}">${{escapeHtml(truncate(rowThreadLabel(row)))}}</td>
@@ -1131,7 +1200,18 @@ def _html(payload: str) -> str:
           <td><div class="flags">${{flags.slice(0, 2).map(flag => `<span class="flag">${{escapeHtml(flag)}}</span>`).join('')}}</div></td>
         `;
         tr.addEventListener('mouseenter', () => showDetail(row));
+        tr.addEventListener('click', () => showDetail(row));
+        tr.addEventListener('keydown', event => {{
+          if (event.key === 'Enter' || event.key === ' ') {{
+            event.preventDefault();
+            showDetail(row);
+          }}
+        }});
         rowsEl.appendChild(tr);
+      }}
+      if (!initialDetailApplied && urlParams.get('detail') === 'first' && page.items[0]) {{
+        initialDetailApplied = true;
+        showDetail(page.items[0]);
       }}
       if (!rows.length) {{
         rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No calls match the current filters.</td></tr>';
@@ -1139,6 +1219,15 @@ def _html(payload: str) -> str:
     }}
     function renderThreads(rows) {{
       const groups = groupThreads(rows);
+      if (!initialThreadExpansionApplied && activeView === 'threads') {{
+        const expansion = urlParams.get('expand');
+        if (expansion === 'all') {{
+          groups.forEach(group => expandedThreads.add(group.key));
+        }} else if (expansion === 'first' && groups[0]) {{
+          expandedThreads.add(groups[0].key);
+        }}
+        initialThreadExpansionApplied = true;
+      }}
       const page = paginate(groups);
       updatePager(page);
       tableTitleEl.textContent = 'Threads';
@@ -1156,7 +1245,10 @@ def _html(payload: str) -> str:
           group.attachedCount ? 'attached' : '',
         ].filter(Boolean).join(' - ');
         tr.className = `thread-row${{group.parentThreadLabel ? ' spawned-thread' : ''}}`;
+        tr.tabIndex = 0;
+        tr.setAttribute('role', 'button');
         tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+        tr.setAttribute('aria-label', `${{expanded ? 'Collapse' : 'Expand'}} ${{group.label}} calls`);
         tr.innerHTML = `
           <td>${{escapeHtml(truncate(group.latestActivity, 20))}}</td>
           <td>
@@ -1181,7 +1273,14 @@ def _html(payload: str) -> str:
           }} else {{
             expandedThreads.add(group.key);
           }}
+          showThreadDetail(group);
           render();
+        }});
+        tr.addEventListener('keydown', event => {{
+          if (event.key === 'Enter' || event.key === ' ') {{
+            event.preventDefault();
+            tr.click();
+          }}
         }});
         tr.addEventListener('mouseenter', () => showThreadDetail(group));
         rowsEl.appendChild(tr);
@@ -1192,6 +1291,10 @@ def _html(payload: str) -> str:
       if (!groups.length) {{
         rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No threads match the current filters.</td></tr>';
       }}
+      if (!initialDetailApplied && urlParams.get('detail') === 'first' && page.items[0]) {{
+        initialDetailApplied = true;
+        showThreadDetail(page.items[0]);
+      }}
     }}
     function renderThreadCalls(group) {{
       const tr = document.createElement('tr');
@@ -1199,7 +1302,7 @@ def _html(payload: str) -> str:
       const calls = group.calls.map(row => {{
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
         return `
-          <tr class="thread-call-row" data-record-id="${{escapeHtml(row.record_id || '')}}">
+          <tr class="thread-call-row" tabindex="0" role="button" data-record-id="${{escapeHtml(row.record_id || '')}}">
             <td>${{escapeHtml(truncate(row.event_timestamp, 20))}}</td>
             <td>${{escapeHtml(short(row.model))}}</td>
             <td>${{escapeHtml(short(row.effort))}}</td>
@@ -1430,7 +1533,7 @@ def _html(payload: str) -> str:
     }});
     autoRefreshEl.addEventListener('change', () => {{
       scheduleAutoRefresh();
-      updateLiveStatus(autoRefreshEl.checked ? `Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s. ${{loadedRowsDescription()}}.` : `Live updates paused. ${{loadedRowsDescription()}}.`);
+      updateLiveStatus(autoRefreshEl.checked ? `Live · polls every ${{liveRefreshIntervalMs / 1000}}s · ${{loadedRowsDescription()}}` : `Live paused · ${{loadedRowsDescription()}}`);
       if (autoRefreshEl.checked) refreshDashboardData(false);
     }});
     document.addEventListener('visibilitychange', () => {{
@@ -1453,6 +1556,20 @@ def _html(payload: str) -> str:
       const row = rowByRecordId.get(callRow.dataset.recordId);
       if (row) showDetail(row);
     }});
+    rowsEl.addEventListener('click', event => {{
+      const callRow = event.target.closest('.thread-call-row');
+      if (!callRow || !rowsEl.contains(callRow)) return;
+      const row = rowByRecordId.get(callRow.dataset.recordId);
+      if (row) showDetail(row);
+    }});
+    rowsEl.addEventListener('keydown', event => {{
+      if (event.key !== 'Enter' && event.key !== ' ') return;
+      const callRow = event.target.closest('.thread-call-row');
+      if (!callRow || !rowsEl.contains(callRow)) return;
+      event.preventDefault();
+      const row = rowByRecordId.get(callRow.dataset.recordId);
+      if (row) showDetail(row);
+    }});
     [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', () => {{
       currentPage = 1;
       render();
@@ -1466,9 +1583,9 @@ def _html(payload: str) -> str:
       autoRefreshEl.checked = false;
       autoRefreshEl.disabled = true;
       loadLimitEl.disabled = true;
-      updateLiveStatus(`Static file mode. ${{loadedRowsDescription()}}. Refresh reloads the dashboard snapshot.`);
+      updateLiveStatus(`Static snapshot · ${{loadedRowsDescription()}}`);
     }} else {{
-      updateLiveStatus(`Live updates enabled; polling every ${{liveRefreshIntervalMs / 1000}}s. ${{loadedRowsDescription()}}.`);
+      updateLiveStatus(`Live · polls every ${{liveRefreshIntervalMs / 1000}}s · ${{loadedRowsDescription()}}`);
       scheduleAutoRefresh();
     }}
     render();

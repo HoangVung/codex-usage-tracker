@@ -8,6 +8,8 @@
 - Add `python -m codex_usage_tracker` support and CLI `--version` output.
 - Add release-readiness checks for version alignment, required docs, package data, built wheels, and tracked secret patterns.
 - Harden local dashboard server responses with browser security headers and safer IPv6 localhost URLs.
+- Tighten the dashboard header copy, add click/keyboard row inspection, and keep detailed usage guidance out of the primary UI.
+- Add a screenshot-driven dashboard guide built from synthetic aggregate fixture data.
 - Preserve requested virtualenv Python paths during plugin install instead of resolving through interpreter symlinks.
 - Keep generated dashboards, SQLite databases, CSV exports, and raw Codex logs out of git.
 
