@@ -65,7 +65,35 @@ The tracker intentionally does not store prompts, assistant messages, tool outpu
 
 ## Quick Install
 
-Recommended install path after the repository is public:
+### Let Codex Install It
+
+Open a Codex session on your machine and paste this:
+
+```text
+Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
+Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
+After installation, run codex-usage-tracker install-plugin, update-pricing, refresh, doctor, and serve-dashboard --open.
+Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
+```
+
+Codex should run roughly:
+
+```bash
+brew install pipx
+pipx ensurepath
+pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+codex-usage-tracker install-plugin
+codex-usage-tracker update-pricing
+codex-usage-tracker refresh
+codex-usage-tracker doctor
+codex-usage-tracker serve-dashboard --open
+```
+
+Restart Codex after `install-plugin` if you want Codex to discover the plugin tools in a fresh session. The localhost dashboard can run immediately.
+
+### Manual Install
+
+Run:
 
 ```bash
 brew install pipx
