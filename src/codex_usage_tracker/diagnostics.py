@@ -45,7 +45,7 @@ def run_doctor(
 ) -> dict[str, Any]:
     """Run read-only setup checks and return a structured report."""
 
-    root = repo_root or find_project_root() or _resolve_plugin_root(plugin_link)
+    root = repo_root or _resolve_plugin_root(plugin_link) or find_project_root()
     checks = [
         _check_package_import(),
         _check_codex_sessions(codex_home),

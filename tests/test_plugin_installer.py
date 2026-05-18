@@ -129,5 +129,6 @@ def test_doctor_accepts_generated_plugin_directory(tmp_path: Path) -> None:
     checks = {check["name"]: check for check in report["checks"]}
 
     assert checks["Plugin root"]["status"] == "pass"
+    assert str(plugin_dir) in checks["Plugin root"]["detail"]
     assert checks["Plugin registration"]["status"] == "pass"
     assert checks["MCP config"]["status"] == "pass"
