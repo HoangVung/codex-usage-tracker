@@ -88,3 +88,4 @@ class RefreshResult:
     parsed_events: int
     inserted_or_updated_events: int
     db_path: str
+    skipped_events: int = 0

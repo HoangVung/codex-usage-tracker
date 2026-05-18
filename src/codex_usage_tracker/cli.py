@@ -254,6 +254,8 @@ def _main() -> int:
             f"Scanned {result.scanned_files} files, parsed {result.parsed_events} "
             f"usage events, upserted {result.inserted_or_updated_events} rows into {result.db_path}."
         )
+        if result.skipped_events:
+            print(f"Skipped {result.skipped_events} malformed token-count events.")
         return 0
 
     if args.command == "summary":

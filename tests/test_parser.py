@@ -98,6 +98,34 @@ def test_parser_skips_missing_info_and_duplicate_snapshots(tmp_path: Path) -> No
     assert all("SECRET" not in str(event.to_row()) for event in events)
 
 
+def test_parser_skips_corrupt_token_count_and_continues(tmp_path: Path) -> None:
+    log_path = tmp_path / f"rollout-2026-05-17T14-58-23-{SESSION_ID}.jsonl"
+    corrupt = _token_event(100, 100)
+    corrupt["payload"]["info"]["last_token_usage"]["input_tokens"] = "not-a-number"  # type: ignore[index]
+    optional_bad_window = _token_event(150, 50)
+    optional_bad_window["payload"]["info"]["model_context_window"] = "huge"  # type: ignore[index]
+    _write_jsonl(
+        log_path,
+        [
+            _entry("session_meta", {"id": SESSION_ID}),
+            _entry(
+                "turn_context",
+                {"turn_id": "turn-a", "model": "gpt-5.5", "effort": "high"},
+            ),
+            corrupt,
+            optional_bad_window,
+            _token_event(210, 60),
+        ],
+    )
+
+    stats: dict[str, int] = {}
+    events = parse_usage_events_from_file(log_path, stats=stats)
+
+    assert stats["skipped_events"] == 1
+    assert [event.cumulative_total_tokens for event in events] == [150, 210]
+    assert events[0].model_context_window is None
+
+
 def test_session_index_join_and_archived_log_discovery(tmp_path: Path) -> None:
     codex_home = tmp_path / ".codex"
     session_dir = codex_home / "sessions" / "2026" / "05" / "17"

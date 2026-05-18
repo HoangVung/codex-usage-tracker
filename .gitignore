@@ -17,6 +17,7 @@ dist/
 *.db
 *.csv
 *.html
+!src/codex_usage_tracker/plugin_data/docs/dashboard-guide.html
 
 .DS_Store
 tmp/

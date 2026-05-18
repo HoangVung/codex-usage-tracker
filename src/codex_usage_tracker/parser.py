@@ -5,7 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from collections.abc import Iterable
+from collections.abc import Iterable, MutableMapping
 from pathlib import Path
 from typing import Any
 
@@ -54,19 +54,23 @@ def find_session_logs(
 
 
 def parse_usage_events(
-    paths: Iterable[Path], session_index: dict[str, SessionInfo] | None = None
+    paths: Iterable[Path],
+    session_index: dict[str, SessionInfo] | None = None,
+    stats: MutableMapping[str, int] | None = None,
 ) -> list[UsageEvent]:
     """Parse all provided logs into aggregate usage events."""
 
     index = session_index or {}
     events: list[UsageEvent] = []
     for path in paths:
-        events.extend(parse_usage_events_from_file(path, index))
+        events.extend(parse_usage_events_from_file(path, index, stats=stats))
     return events
 
 
 def parse_usage_events_from_file(
-    path: Path, session_index: dict[str, SessionInfo] | None = None
+    path: Path,
+    session_index: dict[str, SessionInfo] | None = None,
+    stats: MutableMapping[str, int] | None = None,
 ) -> list[UsageEvent]:
     """Parse one Codex JSONL log without storing raw message content."""
 
@@ -124,25 +128,33 @@ def parse_usage_events_from_file(
             if not isinstance(total_usage, dict) or not isinstance(last_usage, dict):
                 continue
 
-            cumulative_total = _int(total_usage.get("total_tokens"))
+            try:
+                cumulative_total = _required_int(total_usage.get("total_tokens"))
+            except ValueError:
+                _increment_stat(stats, "skipped_events")
+                continue
             if cumulative_total <= last_cumulative_total:
                 continue
-            last_cumulative_total = cumulative_total
 
             effective_session_id = session_id or "unknown"
             session_info = session_info or index.get(effective_session_id)
-            event = _build_event(
-                path=path,
-                line_number=line_number,
-                event_timestamp=timestamp,
-                session_id=effective_session_id,
-                session_info=session_info,
-                session_meta=session_meta,
-                current_turn=current_turn,
-                model_context_window=_nullable_int(info.get("model_context_window")),
-                last_usage=last_usage,
-                total_usage=total_usage,
-            )
+            try:
+                event = _build_event(
+                    path=path,
+                    line_number=line_number,
+                    event_timestamp=timestamp,
+                    session_id=effective_session_id,
+                    session_info=session_info,
+                    session_meta=session_meta,
+                    current_turn=current_turn,
+                    model_context_window=_nullable_int(info.get("model_context_window")),
+                    last_usage=last_usage,
+                    total_usage=total_usage,
+                )
+            except ValueError:
+                _increment_stat(stats, "skipped_events")
+                continue
+            last_cumulative_total = cumulative_total
             events.append(event)
 
     return events
@@ -160,12 +172,12 @@ def _build_event(
     last_usage: dict[str, Any],
     total_usage: dict[str, Any],
 ) -> UsageEvent:
-    input_tokens = _int(last_usage.get("input_tokens"))
-    cached_input_tokens = _int(last_usage.get("cached_input_tokens"))
-    output_tokens = _int(last_usage.get("output_tokens"))
-    reasoning_output_tokens = _int(last_usage.get("reasoning_output_tokens"))
-    total_tokens = _int(last_usage.get("total_tokens"))
-    cumulative_total_tokens = _int(total_usage.get("total_tokens"))
+    input_tokens = _required_int(last_usage.get("input_tokens"))
+    cached_input_tokens = _required_int(last_usage.get("cached_input_tokens"))
+    output_tokens = _required_int(last_usage.get("output_tokens"))
+    reasoning_output_tokens = _required_int(last_usage.get("reasoning_output_tokens"))
+    total_tokens = _required_int(last_usage.get("total_tokens"))
+    cumulative_total_tokens = _required_int(total_usage.get("total_tokens"))
     record_id = _record_id(
         session_id=session_id,
         turn_id=_optional_str(current_turn.get("turn_id")),
@@ -201,10 +213,10 @@ def _build_event(
         output_tokens=output_tokens,
         reasoning_output_tokens=reasoning_output_tokens,
         total_tokens=total_tokens,
-        cumulative_input_tokens=_int(total_usage.get("input_tokens")),
-        cumulative_cached_input_tokens=_int(total_usage.get("cached_input_tokens")),
-        cumulative_output_tokens=_int(total_usage.get("output_tokens")),
-        cumulative_reasoning_output_tokens=_int(
+        cumulative_input_tokens=_required_int(total_usage.get("input_tokens")),
+        cumulative_cached_input_tokens=_required_int(total_usage.get("cached_input_tokens")),
+        cumulative_output_tokens=_required_int(total_usage.get("output_tokens")),
+        cumulative_reasoning_output_tokens=_required_int(
             total_usage.get("reasoning_output_tokens")
         ),
         cumulative_total_tokens=cumulative_total_tokens,
@@ -287,7 +299,10 @@ def _optional_str(value: object) -> str | None:
 def _nullable_int(value: object) -> int | None:
     if value is None:
         return None
-    return _int(value)
+    try:
+        return _int(value)
+    except ValueError:
+        return None
 
 
 def _int(value: object) -> int:
@@ -298,5 +313,19 @@ def _int(value: object) -> int:
     if isinstance(value, float):
         return int(value)
     if isinstance(value, str) and value.strip():
-        return int(value)
+        try:
+            return int(value)
+        except ValueError as exc:
+            raise ValueError(f"invalid integer value: {value!r}") from exc
     return 0
+
+
+def _required_int(value: object) -> int:
+    if value is None:
+        return 0
+    return _int(value)
+
+
+def _increment_stat(stats: MutableMapping[str, int] | None, key: str) -> None:
+    if stats is not None:
+        stats[key] = stats.get(key, 0) + 1

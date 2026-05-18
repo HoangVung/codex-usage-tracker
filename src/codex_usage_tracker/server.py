@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
 import webbrowser
 from datetime import datetime, timezone
@@ -144,6 +145,12 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
                 max_chars=self._context_chars,
                 include_tool_output=include_tool_output,
             )
+        except sqlite3.Error as exc:
+            self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": f"Database error while loading context: {exc}"},
+            )
+            return
         except ValueError as exc:
             self._send_json(HTTPStatus.NOT_FOUND, {"error": str(exc)})
             return
@@ -162,26 +169,33 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         params = parse_qs(query)
         limit = _parse_limit(_first(params.get("limit")), self._limit)
         refresh_result = None
-        if _truthy(_first(params.get("refresh"))):
-            with self._refresh_lock:
-                result = refresh_usage_index(
-                    codex_home=self._codex_home,
-                    db_path=self._db_path,
-                    include_archived=self._include_archived,
-                )
-            refresh_result = {
-                "scanned_files": result.scanned_files,
-                "parsed_events": result.parsed_events,
-                "inserted_or_updated_events": result.inserted_or_updated_events,
-                "db_path": result.db_path,
-            }
         try:
+            if _truthy(_first(params.get("refresh"))):
+                with self._refresh_lock:
+                    result = refresh_usage_index(
+                        codex_home=self._codex_home,
+                        db_path=self._db_path,
+                        include_archived=self._include_archived,
+                    )
+                refresh_result = {
+                    "scanned_files": result.scanned_files,
+                    "parsed_events": result.parsed_events,
+                    "skipped_events": result.skipped_events,
+                    "inserted_or_updated_events": result.inserted_or_updated_events,
+                    "db_path": result.db_path,
+                }
             payload = dashboard_payload(
                 db_path=self._db_path,
                 limit=limit,
                 pricing_path=self._pricing_path,
                 since=self._since,
             )
+        except sqlite3.Error as exc:
+            self._send_json(
+                HTTPStatus.INTERNAL_SERVER_ERROR,
+                {"error": f"Database error while reading usage data: {exc}"},
+            )
+            return
         except OSError as exc:
             self._send_json(
                 HTTPStatus.INTERNAL_SERVER_ERROR,

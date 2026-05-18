@@ -7,6 +7,7 @@ from codex_usage_tracker.pricing import (
     ESTIMATED_MODEL_PRICES,
     OPENAI_PRICING_MD_URL,
     PRICING_SCHEMA,
+    PricingParseError,
     load_pricing_config,
     parse_openai_pricing_markdown,
     summarize_pricing_coverage,
@@ -54,6 +55,31 @@ def test_parse_openai_pricing_markdown_uses_requested_tier() -> None:
             "output_per_million": 15.0,
         }
     }
+
+
+def test_parse_openai_pricing_markdown_reports_schema_changes() -> None:
+    missing_tier = OPENAI_PRICING_FIXTURE.replace('tier="standard"', 'tier="other"')
+    missing_rows = OPENAI_PRICING_FIXTURE.replace("rows={[", "items={[", 1)
+    malformed_rows = """
+<TextTokenPricingTables
+  tier="standard"
+  rows={[
+    ["not-parseable"]
+  ]}
+/>
+"""
+
+    for source, expected in [
+        (missing_tier, "tier marker"),
+        (missing_rows, "rows"),
+        (malformed_rows, "no parseable text-token pricing rows"),
+    ]:
+        try:
+            parse_openai_pricing_markdown(source, tier="standard")
+        except PricingParseError as exc:
+            assert expected in str(exc)
+        else:
+            raise AssertionError("expected PricingParseError")
 
 
 def test_update_pricing_from_openai_docs_writes_source_metadata(tmp_path: Path) -> None:

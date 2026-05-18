@@ -4,6 +4,10 @@ from __future__ import annotations
 
 import html
 import json
+import os
+import shutil
+from importlib import resources
+from importlib.resources.abc import Traversable
 from pathlib import Path
 
 from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
@@ -41,6 +45,7 @@ def generate_dashboard(
     since: str | None = None,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
+    guide_href = _dashboard_guide_href(output_path)
     payload = json.dumps(
         dashboard_payload(
             db_path=db_path,
@@ -50,7 +55,7 @@ def generate_dashboard(
         ),
         ensure_ascii=True,
     ).replace("</", "<\\/")
-    output_path.write_text(_html(payload), encoding="utf-8")
+    output_path.write_text(_html(payload, guide_href=guide_href), encoding="utf-8")
     return output_path
 
 
@@ -60,8 +65,38 @@ def _normalize_limit(limit: int | None) -> int | None:
     return int(limit)
 
 
-def _html(payload: str) -> str:
+def _dashboard_guide_href(output_path: Path) -> str | None:
+    override = os.environ.get("CODEX_USAGE_TRACKER_DOCS_URL")
+    if override:
+        return override
+    try:
+        docs_source = resources.files("codex_usage_tracker.plugin_data").joinpath("docs")
+        docs_target = output_path.parent / "codex-usage-tracker-guide"
+        if docs_target.exists():
+            shutil.rmtree(docs_target)
+        _copy_resource_tree(docs_source, docs_target)
+    except (FileNotFoundError, ModuleNotFoundError, OSError):
+        return None
+    return "codex-usage-tracker-guide/dashboard-guide.html"
+
+
+def _copy_resource_tree(source: Traversable, target: Path) -> None:
+    target.mkdir(parents=True, exist_ok=True)
+    for child in source.iterdir():
+        destination = target / child.name
+        if child.is_dir():
+            _copy_resource_tree(child, destination)
+        else:
+            destination.write_bytes(child.read_bytes())
+
+
+def _html(payload: str, guide_href: str | None = None) -> str:
     title = html.escape("Codex Usage Dashboard")
+    guide_link = (
+        f'<a class="guide-link" href="{html.escape(guide_href, quote=True)}">Dashboard guide</a>'
+        if guide_href
+        else ""
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -647,7 +682,7 @@ def _html(payload: str) -> str:
       <span class="status-chip">Aggregate only</span>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
       <span id="pricingSource" class="source-line"></span>
-      <a class="guide-link" href="https://github.com/douglasmonsky/codex-usage-tracker/blob/main/docs/dashboard-guide.md">Dashboard guide</a>
+      {guide_link}
     </div>
   </header>
   <main>
@@ -1652,7 +1687,10 @@ def _html(payload: str) -> str:
         const indexed = result.inserted_or_updated_events === undefined
           ? ''
           : ` Indexed ${{number.format(result.inserted_or_updated_events)}} aggregate rows from ${{number.format(result.scanned_files || 0)}} logs.`;
-        updateLiveStatus(`Updated ${{formatTimestamp(nextPayload.refreshed_at)}}. ${{loadedRowsDescription()}}.${{indexed}}`);
+        const skipped = result.skipped_events
+          ? ` Skipped ${{number.format(result.skipped_events)}} malformed token-count events.`
+          : '';
+        updateLiveStatus(`Updated ${{formatTimestamp(nextPayload.refreshed_at)}}. ${{loadedRowsDescription()}}.${{indexed}}${{skipped}}`);
       }} catch (error) {{
         const message = error.message || String(error);
         updateLiveStatus(`Live refresh unavailable: ${{message}}${{manual ? '. Reload this page after regenerating a static dashboard, or run codex-usage-tracker serve-dashboard.' : ''}}`);

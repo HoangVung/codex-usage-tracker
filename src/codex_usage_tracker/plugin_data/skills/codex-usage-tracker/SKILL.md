@@ -11,7 +11,7 @@ Use this plugin to inspect aggregate token usage from local Codex session logs.
 
 The index, dashboard payload, CSV export, and normal summaries are aggregate-only. They should never return prompts, assistant message text, tool outputs, pasted secrets, or raw transcript snippets.
 
-The only exception is `usage_call_context`, which intentionally reads one selected record's source JSONL on demand. Use it only when the user explicitly asks to inspect actual context, and mention that returned text is local, redacted, size-limited, and not persisted by the tracker.
+The only exception is `usage_call_context`, which intentionally reads one selected record's source JSONL on demand. It requires `CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1` in the MCP server environment. Use it only when the user explicitly asks to inspect actual context, and mention that returned text is local, redacted, size-limited, and not persisted by the tracker.
 
 ## Common Workflows
 

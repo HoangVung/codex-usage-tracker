@@ -16,7 +16,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `src/codex_usage_tracker/` - parser, SQLite store, reports, dashboard, CLI, and MCP server.
 - `src/codex_usage_tracker/context.py` - on-demand raw-context reader for one selected usage record.
 - `src/codex_usage_tracker/plugin_installer.py` - package-owned local Codex plugin installer.
-- `src/codex_usage_tracker/plugin_data/` - plugin assets and skill files bundled into wheels.
+- `src/codex_usage_tracker/plugin_data/` - plugin assets, local dashboard guide, screenshots, and skill files bundled into wheels.
 - `src/codex_usage_tracker/server.py` - localhost dashboard server with live aggregate refresh and lazy context endpoints.
 - `~/.codex-usage-tracker/pricing.json` - optional local-only pricing config, never committed.
 - `.codex-plugin/plugin.json` - Codex plugin manifest.
@@ -24,6 +24,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `scripts/install_local_plugin.py` - compatibility wrapper around `codex-usage-tracker install-plugin`.
 - `scripts/check_release.py` - release-readiness checks for docs, versions, packaging, wheel contents, and tracked secret patterns.
 - `.github/workflows/ci.yml` - GitHub Actions test and package build workflow.
+- `.github/workflows/pricing-compat.yml` - scheduled/manual non-blocking live pricing parser compatibility check.
 - `docs/dashboard-guide.md` and `docs/assets/` - screenshot-driven dashboard usage guide built from synthetic aggregate fixture data.
 - `tests/` - synthetic fixtures and unit tests.
 

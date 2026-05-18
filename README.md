@@ -90,6 +90,7 @@ Then:
 6. Use `Load context` only when the aggregate fields are not enough; context is fetched on demand from the local source JSONL and is not saved into SQLite or the dashboard.
 
 For a screenshot-driven walkthrough, see [`docs/dashboard-guide.md`](docs/dashboard-guide.md).
+Generated dashboards also link to a bundled local HTML copy of the guide. Set `CODEX_USAGE_TRACKER_DOCS_URL` if you want generated dashboards to point at a hosted docs page instead.
 
 ## Development Setup
 
@@ -262,6 +263,8 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 - subagent source, role, nickname, parent session id, and parent thread name when present
 
 Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database, CSV exports, or generated dashboard HTML. `usage_call_context`, `codex-usage-tracker context`, and the `serve-dashboard` context endpoint read a single source JSONL file only when explicitly requested, redact common secret patterns, and cap returned text size.
+
+For MCP users, `usage_call_context` is additionally disabled unless the MCP server process has `CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1` in its environment. Aggregate MCP tools do not require that opt-in.
 
 Cost estimates are calculated only from aggregate token fields and your local pricing config. They are omitted when no matching model price is configured. Pricing refreshes pull only OpenAI's public pricing markdown and do not send local usage data anywhere.
 

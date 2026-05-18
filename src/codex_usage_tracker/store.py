@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import sqlite3
 from collections.abc import Iterable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +57,8 @@ EVENT_COLUMNS = [
     "context_window_percent",
 ]
 
+SCHEMA_VERSION = 1
+
 
 def refresh_usage_index(
     codex_home: Path = DEFAULT_CODEX_HOME,
@@ -66,24 +69,48 @@ def refresh_usage_index(
 
     logs = find_session_logs(codex_home=codex_home, include_archived=include_archived)
     session_index = load_session_index(codex_home)
-    events = parse_usage_events(logs, session_index=session_index)
+    stats: dict[str, int] = {}
+    events = parse_usage_events(logs, session_index=session_index, stats=stats)
     inserted = upsert_usage_events(events, db_path=db_path)
+    skipped_events = stats.get("skipped_events", 0)
+    record_refresh_metadata(
+        db_path=db_path,
+        scanned_files=len(logs),
+        parsed_events=len(events),
+        skipped_events=skipped_events,
+        inserted_or_updated_events=inserted,
+    )
     return RefreshResult(
         scanned_files=len(logs),
         parsed_events=len(events),
         inserted_or_updated_events=inserted,
         db_path=str(db_path),
+        skipped_events=skipped_events,
     )
 
 
 def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    conn = sqlite3.connect(db_path, timeout=5.0)
     conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA busy_timeout = 5000")
+    try:
+        conn.execute("PRAGMA journal_mode = WAL")
+    except sqlite3.DatabaseError:
+        pass
     return conn
 
 
 def init_db(conn: sqlite3.Connection) -> None:
+    user_version = int(conn.execute("PRAGMA user_version").fetchone()[0])
+    if user_version < SCHEMA_VERSION:
+        _migrate_v1(conn)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
+    else:
+        _migrate_v1(conn)
+
+
+def _migrate_v1(conn: sqlite3.Connection) -> None:
     conn.executescript(
         """
         CREATE TABLE IF NOT EXISTS usage_events (
@@ -129,16 +156,20 @@ def init_db(conn: sqlite3.Connection) -> None:
             key TEXT PRIMARY KEY,
             value TEXT NOT NULL
         );
-
-        CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_events(session_id);
-        CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_events(event_timestamp);
-        CREATE INDEX IF NOT EXISTS idx_usage_model_effort ON usage_events(model, effort);
-        CREATE INDEX IF NOT EXISTS idx_usage_thread ON usage_events(thread_name);
         """
     )
     _ensure_columns(
         conn,
         {
+            "thread_name": "TEXT",
+            "session_updated_at": "TEXT",
+            "turn_id": "TEXT",
+            "turn_timestamp": "TEXT",
+            "cwd": "TEXT",
+            "model": "TEXT",
+            "effort": "TEXT",
+            "current_date": "TEXT",
+            "timezone": "TEXT",
             "thread_source": "TEXT",
             "subagent_type": "TEXT",
             "agent_role": "TEXT",
@@ -146,8 +177,46 @@ def init_db(conn: sqlite3.Connection) -> None:
             "parent_session_id": "TEXT",
             "parent_thread_name": "TEXT",
             "parent_session_updated_at": "TEXT",
+            "model_context_window": "INTEGER",
         },
     )
+    conn.executescript(
+        """
+        CREATE INDEX IF NOT EXISTS idx_usage_session ON usage_events(session_id);
+        CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_events(event_timestamp);
+        CREATE INDEX IF NOT EXISTS idx_usage_model_effort ON usage_events(model, effort);
+        CREATE INDEX IF NOT EXISTS idx_usage_thread ON usage_events(thread_name);
+        """
+    )
+
+
+def record_refresh_metadata(
+    db_path: Path = DEFAULT_DB_PATH,
+    *,
+    scanned_files: int,
+    parsed_events: int,
+    skipped_events: int,
+    inserted_or_updated_events: int,
+) -> None:
+    """Record the latest refresh counters in refresh_meta."""
+
+    values = {
+        "latest_refresh_at": datetime.now(UTC).replace(microsecond=0).isoformat(),
+        "scanned_files": str(scanned_files),
+        "parsed_events": str(parsed_events),
+        "skipped_events": str(skipped_events),
+        "inserted_or_updated_events": str(inserted_or_updated_events),
+    }
+    with connect(db_path) as conn:
+        init_db(conn)
+        conn.executemany(
+            """
+            INSERT INTO refresh_meta (key, value)
+            VALUES (?, ?)
+            ON CONFLICT(key) DO UPDATE SET value = excluded.value
+            """,
+            values.items(),
+        )
 
 
 def _ensure_columns(conn: sqlite3.Connection, columns: dict[str, str]) -> None:

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import sqlite3
 import threading
+import urllib.error
 import urllib.request
 from functools import partial
 from http.server import ThreadingHTTPServer
@@ -16,7 +18,9 @@ from codex_usage_tracker.pricing import (
     load_pricing_config,
 )
 from codex_usage_tracker.store import (
+    connect,
     export_usage_csv,
+    init_db,
     query_dashboard_event_count,
     query_dashboard_events,
     query_most_expensive_calls,
@@ -47,6 +51,7 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
 
     assert first.parsed_events == 4
     assert second.parsed_events == 4
+    assert first.skipped_events == 0
     assert len(session_rows) == 2
     assert summary[0]["group_key"] == "gpt-5.5"
     assert summary[0]["total_tokens"] == 350
@@ -58,6 +63,97 @@ def test_refresh_is_idempotent_and_summary_works(tmp_path: Path) -> None:
     assert subagent_rows[0]["parent_thread_name"] == "Add Codex token tracking"
     assert subagent_rows[0]["parent_session_updated_at"] == "2026-05-17T18:58:27Z"
     assert expensive[0]["total_tokens"] == 200
+    with connect(db_path) as conn:
+        init_db(conn)
+        meta = {
+            row["key"]: row["value"]
+            for row in conn.execute("SELECT key, value FROM refresh_meta").fetchall()
+        }
+    assert meta["parsed_events"] == "4"
+    assert meta["skipped_events"] == "0"
+    assert meta["inserted_or_updated_events"] == "4"
+
+
+def test_refresh_reports_skipped_corrupt_token_events(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    log_path = next((codex_home / "sessions").glob("**/*.jsonl"))
+    corrupt = _token_event(600, 300)
+    corrupt["payload"]["info"]["last_token_usage"]["total_tokens"] = "bad-total"  # type: ignore[index]
+    valid = _token_event(650, 50)
+    with log_path.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(corrupt) + "\n")
+        handle.write(json.dumps(valid) + "\n")
+
+    result = refresh_usage_index(codex_home=codex_home, db_path=db_path)
+    rows = query_session_usage(db_path=db_path, session_id=SESSION_ID)
+
+    assert result.skipped_events == 1
+    assert result.parsed_events == 5
+    assert [row["cumulative_total_tokens"] for row in rows] == [100, 300, 650]
+
+
+def test_connect_sets_sqlite_concurrency_pragmas(tmp_path: Path) -> None:
+    db_path = tmp_path / "usage.sqlite3"
+    with connect(db_path) as conn:
+        init_db(conn)
+        busy_timeout = conn.execute("PRAGMA busy_timeout").fetchone()[0]
+        journal_mode = conn.execute("PRAGMA journal_mode").fetchone()[0]
+        user_version = conn.execute("PRAGMA user_version").fetchone()[0]
+
+    assert busy_timeout == 5000
+    assert str(journal_mode).lower() == "wal"
+    assert user_version == 1
+
+
+def test_init_db_repairs_version_zero_schema(tmp_path: Path) -> None:
+    db_path = tmp_path / "usage.sqlite3"
+    raw = sqlite3.connect(db_path)
+    try:
+        raw.execute(
+            """
+            CREATE TABLE usage_events (
+                record_id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL,
+                event_timestamp TEXT NOT NULL,
+                source_file TEXT NOT NULL,
+                line_number INTEGER NOT NULL,
+                input_tokens INTEGER NOT NULL,
+                cached_input_tokens INTEGER NOT NULL,
+                output_tokens INTEGER NOT NULL,
+                reasoning_output_tokens INTEGER NOT NULL,
+                total_tokens INTEGER NOT NULL,
+                cumulative_input_tokens INTEGER NOT NULL,
+                cumulative_cached_input_tokens INTEGER NOT NULL,
+                cumulative_output_tokens INTEGER NOT NULL,
+                cumulative_reasoning_output_tokens INTEGER NOT NULL,
+                cumulative_total_tokens INTEGER NOT NULL,
+                uncached_input_tokens INTEGER NOT NULL,
+                cache_ratio REAL NOT NULL,
+                reasoning_output_ratio REAL NOT NULL,
+                context_window_percent REAL NOT NULL
+            )
+            """
+        )
+        raw.commit()
+    finally:
+        raw.close()
+
+    with connect(db_path) as conn:
+        init_db(conn)
+        columns = {
+            row["name"]
+            for row in conn.execute("PRAGMA table_info(usage_events)").fetchall()
+        }
+        indexes = {
+            row["name"]
+            for row in conn.execute("PRAGMA index_list(usage_events)").fetchall()
+        }
+        user_version = conn.execute("PRAGMA user_version").fetchone()[0]
+
+    assert {"thread_source", "parent_thread_name", "parent_session_updated_at"} <= columns
+    assert "idx_usage_timestamp" in indexes
+    assert user_version == 1
 
 
 def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
@@ -98,6 +194,10 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Aggregate only" in dashboard
     assert "Call Details" in dashboard
     assert "Dashboard guide" in dashboard
+    assert "github.com/douglasmonsky/codex-usage-tracker/blob/main/docs/dashboard-guide.md" not in dashboard
+    assert "codex-usage-tracker-guide/dashboard-guide.html" in dashboard
+    assert (tmp_path / "codex-usage-tracker-guide" / "dashboard-guide.html").exists()
+    assert (tmp_path / "codex-usage-tracker-guide" / "assets" / "dashboard-calls.png").exists()
     assert "detail-section" in dashboard
     assert "time-cell" in dashboard
     assert "formatTimestamp" in dashboard
@@ -119,6 +219,20 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="time" selected>Newest calls</option>' in dashboard
+
+
+def test_dashboard_guide_link_can_use_docs_url_override(tmp_path: Path, monkeypatch) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+    monkeypatch.setenv("CODEX_USAGE_TRACKER_DOCS_URL", "https://example.test/guide")
+
+    dashboard_path = tmp_path / "dashboard.html"
+    generate_dashboard(db_path=db_path, output_path=dashboard_path)
+
+    dashboard = dashboard_path.read_text(encoding="utf-8")
+    assert 'href="https://example.test/guide"' in dashboard
+    assert not (tmp_path / "codex-usage-tracker-guide").exists()
 
 
 def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> None:
@@ -162,6 +276,7 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
         thread.join(timeout=5)
 
     assert limited_payload["refresh_result"]["parsed_events"] == 4
+    assert limited_payload["refresh_result"]["skipped_events"] == 0
     assert len(limited_payload["rows"]) == 2
     assert limited_payload["loaded_row_count"] == 2
     assert limited_payload["total_available_rows"] == 4
@@ -177,6 +292,52 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert limited_payload["pricing_configured"] is True
     assert "refreshed_at" in limited_payload
     assert "SECRET RAW PROMPT" not in json.dumps(limited_payload)
+
+
+def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeypatch) -> None:
+    from codex_usage_tracker import server as server_module
+    from codex_usage_tracker.server import _UsageDashboardHandler
+
+    def broken_dashboard_payload(**kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    def broken_context(**kwargs):
+        raise sqlite3.OperationalError("database is locked")
+
+    monkeypatch.setattr(server_module, "dashboard_payload", broken_dashboard_payload)
+    monkeypatch.setattr(server_module, "load_call_context", broken_context)
+    handler = partial(
+        _UsageDashboardHandler,
+        directory=str(tmp_path),
+        db_path=tmp_path / "usage.sqlite3",
+        pricing_path=tmp_path / "pricing.json",
+        limit=5000,
+        since=None,
+        codex_home=tmp_path / ".codex",
+        include_archived=False,
+        dashboard_name="dashboard.html",
+        context_chars=2000,
+        refresh_lock=threading.Lock(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        usage_error = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/usage"
+        )
+        context_error = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/context?record_id=abc"
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert usage_error["status"] == 500
+    assert "Database error" in usage_error["payload"]["error"]
+    assert context_error["status"] == 500
+    assert "Database error" in context_error["payload"]["error"]
 
 
 def test_dashboard_query_limit_zero_loads_all_rows(tmp_path: Path) -> None:
@@ -202,7 +363,18 @@ def test_context_loads_raw_log_only_on_demand(tmp_path: Path) -> None:
     assert context["raw_context_persisted"] is False
     assert "SECRET RAW PROMPT" in context_text
     assert "sk" + "-proj-" not in context_text
+    assert "AKIAIOSFODNN7EXAMPLE" not in context_text
+    assert "Authorization: Bearer abc.def" not in context_text
+    assert "xoxb-123456789012" not in context_text
+    assert "eyJhbGciOiJIUzI1Ni" not in context_text
+    assert "client_secret=super-secret-value" not in context_text
+    assert "BEGIN OPENSSH PRIVATE KEY" not in context_text
     assert "[REDACTED_OPENAI_KEY]" in context_text
+    assert "[REDACTED_AWS_ACCESS_KEY]" in context_text
+    assert "[REDACTED_BEARER_TOKEN]" in context_text
+    assert "[REDACTED_SLACK_TOKEN]" in context_text
+    assert "[REDACTED_JWT]" in context_text
+    assert "[REDACTED_PRIVATE_KEY]" in context_text
     assert any(entry["label"] == "message / user" for entry in context["entries"])
 
 
@@ -226,19 +398,25 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     pricing_coverage = mcp_server.usage_pricing_coverage()
     session = mcp_server.session_usage(session_id=SESSION_ID)
     record_id = query_session_usage(db_path=db_path, session_id=SESSION_ID)[0]["record_id"]
+    context_disabled = mcp_server.usage_call_context(record_id=record_id)
+    monkeypatch.setenv("CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT", "1")
     context = mcp_server.usage_call_context(record_id=record_id)
     dashboard = mcp_server.generate_usage_dashboard()
     pricing_update = mcp_server.update_usage_pricing_config()
     doctor = mcp_server.usage_doctor()
 
     assert refresh["parsed_events"] == 4
+    assert refresh["skipped_events"] == 0
     assert "Add Codex token tracking" in summary
     assert "estimated cost" in model_summary
     assert "Most expensive Codex calls" in expensive
     assert "Codex pricing coverage" in pricing_coverage
     assert SESSION_ID in session
+    assert "Raw context loading through MCP is disabled" in context_disabled
+    assert "SECRET RAW PROMPT" not in context_disabled
     assert "SECRET RAW PROMPT" in context
     assert "sk" + "-proj-" not in context
+    assert "[REDACTED_OPENAI_KEY]" in context
     assert dashboard["dashboard_path"] == str(dashboard_path)
     assert pricing_update["model_count"] == 1
     assert pricing_update["source_url"] == "https://example.test/pricing.md"
@@ -346,7 +524,15 @@ def _make_codex_home(tmp_path: Path) -> Path:
                             "type": "input_text",
                             "text": "SECRET RAW PROMPT "
                             + "sk"
-                            + "-proj-abcdefghijklmnopqrstuvwxyz123456",
+                            + "-proj-abcdefghijklmnopqrstuvwxyz123456 "
+                            + "AKIAIOSFODNN7EXAMPLE "
+                            + "Authorization: Bearer abc.def.ghi123456789 "
+                            + "xoxb-123456789012-123456789012-abcdefghijklmnopqrstuvwx "
+                            + "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9."
+                            + "eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkNvZGV4In0."
+                            + "SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c "
+                            + "client_secret=super-secret-value "
+                            + "-----BEGIN OPENSSH PRIVATE KEY-----abc123-----END OPENSSH PRIVATE KEY-----",
                         }
                     ],
                 },
@@ -428,6 +614,17 @@ def _write_pricing(path: Path) -> Path:
         encoding="utf-8",
     )
     return path
+
+
+def _http_error_json(url: str) -> dict[str, object]:
+    try:
+        urllib.request.urlopen(url, timeout=5)  # noqa: S310 - local test server only
+    except urllib.error.HTTPError as exc:
+        return {
+            "status": exc.code,
+            "payload": json.loads(exc.read().decode("utf-8")),
+        }
+    raise AssertionError("expected HTTPError")
 
 
 def _fake_pricing_update(

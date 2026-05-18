@@ -32,13 +32,22 @@ REQUIRED_FILES = [
     "docs/assets/dashboard-details.png",
     "scripts/check_release.py",
     ".github/workflows/ci.yml",
+    ".github/workflows/pricing-compat.yml",
     ".codex-plugin/plugin.json",
     ".mcp.json",
     "src/codex_usage_tracker/plugin_data/assets/icon.svg",
+    "src/codex_usage_tracker/plugin_data/docs/dashboard-guide.html",
+    "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-calls.png",
+    "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-threads.png",
+    "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-details.png",
     "src/codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
 ]
 WHEEL_REQUIRED_MEMBERS = {
     "codex_usage_tracker/plugin_data/assets/icon.svg",
+    "codex_usage_tracker/plugin_data/docs/dashboard-guide.html",
+    "codex_usage_tracker/plugin_data/docs/assets/dashboard-calls.png",
+    "codex_usage_tracker/plugin_data/docs/assets/dashboard-threads.png",
+    "codex_usage_tracker/plugin_data/docs/assets/dashboard-details.png",
     "codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
 }
 

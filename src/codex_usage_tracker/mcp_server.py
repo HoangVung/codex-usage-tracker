@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
@@ -55,6 +56,7 @@ def refresh_usage_index(include_archived: bool = False) -> dict[str, Any]:
     return {
         "scanned_files": result.scanned_files,
         "parsed_events": result.parsed_events,
+        "skipped_events": result.skipped_events,
         "inserted_or_updated_events": result.inserted_or_updated_events,
         "db_path": result.db_path,
     }
@@ -108,6 +110,18 @@ def usage_call_context(
 ) -> str:
     """Load one model call's logged local context on demand from its source JSONL file."""
 
+    if os.environ.get("CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT") != "1":
+        return json.dumps(
+            {
+                "error": (
+                    "Raw context loading through MCP is disabled. Set "
+                    "CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1 to opt in for this process."
+                ),
+                "raw_context_enabled": False,
+                "record_id": record_id,
+            },
+            indent=2,
+        )
     payload = load_call_context(
         record_id=record_id,
         db_path=DEFAULT_DB_PATH,

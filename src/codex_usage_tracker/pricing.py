@@ -69,6 +69,10 @@ PRICING_TEMPLATE = {
 }
 
 
+class PricingParseError(ValueError):
+    """Raised when the OpenAI pricing Markdown structure cannot be parsed."""
+
+
 @dataclass(frozen=True)
 class PricingConfig:
     """Parsed local model pricing config."""
@@ -170,8 +174,9 @@ def update_pricing_from_openai_docs(
     text = fetcher(source_url)
     models = parse_openai_pricing_markdown(text, tier=tier)
     if not models:
-        raise ValueError(
-            f"no text-token pricing rows were parsed from {source_url} for tier {tier}"
+        raise PricingParseError(
+            f"pricing source schema changed: no text-token pricing rows were parsed "
+            f"from {source_url} for tier {tier!r}"
         )
     aliases = _load_existing_aliases(path)
     estimated_model_count = 0
@@ -236,6 +241,11 @@ def parse_openai_pricing_markdown(
             "cached_input_per_million": cached_rate,
             "output_per_million": output_rate,
         }
+    if not models:
+        raise PricingParseError(
+            f"pricing source schema changed: tier {tier!r} rows block contained no "
+            "parseable text-token pricing rows"
+        )
     return models
 
 
@@ -500,15 +510,39 @@ def _extract_text_token_rows_block(markdown: str, tier: str) -> str:
     tier_marker = f'tier="{tier}"'
     tier_index = markdown.find(tier_marker)
     if tier_index == -1:
-        raise ValueError(f"pricing source does not contain tier {tier!r}")
-    rows_marker_index = markdown.find("rows={[", tier_index)
+        raise PricingParseError(
+            f"pricing source schema changed: could not find text-token tier marker {tier_marker!r}"
+        )
+    search_end = _pricing_component_end(markdown, tier_index)
+    rows_marker_index = markdown.find("rows={[", tier_index, search_end)
     if rows_marker_index == -1:
-        raise ValueError(f"pricing source tier {tier!r} does not contain rows")
-    bracket_index = markdown.find("[", rows_marker_index)
+        raise PricingParseError(
+            f"pricing source schema changed: tier {tier!r} does not contain a rows={{[ block"
+        )
+    bracket_index = markdown.find("[", rows_marker_index, search_end)
     if bracket_index == -1:
-        raise ValueError(f"pricing source tier {tier!r} has malformed rows")
+        raise PricingParseError(
+            f"pricing source schema changed: tier {tier!r} has a malformed rows block"
+        )
     end_index = _find_matching_bracket(markdown, bracket_index)
+    if end_index > search_end:
+        raise PricingParseError(
+            f"pricing source schema changed: tier {tier!r} rows block extends past its component"
+        )
     return markdown[bracket_index + 1 : end_index]
+
+
+def _pricing_component_end(markdown: str, tier_index: int) -> int:
+    candidates = [
+        index
+        for index in (
+            markdown.find("/>", tier_index),
+            markdown.find("</TextTokenPricingTables>", tier_index),
+            markdown.find("<TextTokenPricingTables", tier_index + 1),
+        )
+        if index != -1
+    ]
+    return min(candidates) if candidates else len(markdown)
 
 
 def _find_matching_bracket(text: str, start_index: int) -> int:
@@ -533,7 +567,7 @@ def _find_matching_bracket(text: str, start_index: int) -> int:
             depth -= 1
             if depth == 0:
                 return index
-    raise ValueError("pricing source contains an unterminated rows block")
+    raise PricingParseError("pricing source schema changed: rows block is unterminated")
 
 
 def _normalize_model_name(model: str) -> str:

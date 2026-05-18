@@ -5,5 +5,6 @@ recursive-include docs *.md *.png
 recursive-include skills *.md
 recursive-include scripts *.py
 recursive-include src/codex_usage_tracker/plugin_data/assets *
+recursive-include src/codex_usage_tracker/plugin_data/docs *
 recursive-include src/codex_usage_tracker/plugin_data/skills *
 recursive-include tests *.py
