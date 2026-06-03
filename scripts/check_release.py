@@ -90,7 +90,17 @@ def main() -> int:
 
 
 def _check_required_files() -> list[str]:
-    return [f"missing required file: {path}" for path in REQUIRED_FILES if not (REPO_ROOT / path).exists()]
+    failures: list[str] = []
+    tracked_files = {
+        path.relative_to(REPO_ROOT).as_posix()
+        for path in _tracked_files()
+    }
+    for path in REQUIRED_FILES:
+        if not (REPO_ROOT / path).exists():
+            failures.append(f"missing required file: {path}")
+        elif path not in tracked_files:
+            failures.append(f"required file is not tracked by git: {path}")
+    return failures
 
 
 def _check_versions() -> list[str]:
