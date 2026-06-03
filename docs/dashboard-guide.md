@@ -26,11 +26,21 @@ codex-usage-tracker dashboard --open
 
 Static file mode can still filter, sort, and inspect aggregate call fields. It cannot refresh from logs or load raw context until you open the dashboard through `serve-dashboard`.
 
+## Insights View
+
+The dashboard opens in `Insights` view. This view is designed to answer "what needs attention?" before you start sorting tables.
+
+- `Needs Attention` cards rank costly threads, low cache reuse, context bloat, unpriced usage, estimated pricing, and reasoning-output spikes from aggregate fields only.
+- `Investigation Presets` apply a view, derived filter, sort order, and explanatory caption together.
+- Presets include highest-cost threads, context bloat, cache misses, pricing gaps, and estimated-price review.
+- The top table shows threads by attention score so you can jump from a summary signal into a thread timeline or selected call.
+- Clear an active preset to return to normal manual filtering and sorting.
+
 ## Calls View
 
 ![Calls view showing filters, totals, the model-call table, and the details panel.](assets/dashboard-calls.png)
 
-The dashboard opens in `Calls` view. This is the most direct way to inspect individual model calls.
+Use `Calls` view when you want to inspect individual model calls.
 
 - The header stays compact: refresh controls on the right, aggregate/privacy status on the left.
 - Search matches thread, cwd, model, session id, turn id, subagent role, and parent thread fields.
@@ -38,8 +48,10 @@ The dashboard opens in `Calls` view. This is the most direct way to inspect indi
 - Time values are shown in your browser's local date/time format while sorting still uses the logged timestamp.
 - Click a column header like `Time`, `Thread`, `Tokens`, `Cost`, or `Cache` to sort. Click the same header again to reverse the direction.
 - Hover or click a row to pin its aggregate fields in `Call Details`; on desktop, the details panel stays visible as you scroll.
-- The `Call Details` panel always reserves a visible scrollbar so long field lists are discoverable before you start scrolling.
-- Pagination appears only when the active Calls or Threads view has more than one page.
+- The `Call Details` panel groups primary cost, cache, context, and pricing signals first, then thread narrative and token breakdowns.
+- Raw aggregate identifiers and source file metadata are collapsed until you need them.
+- The details panel always reserves a visible scrollbar so long field lists are discoverable before you start scrolling.
+- Pagination appears only when the active Insights, Calls, or Threads view has more than one page.
 - After you scroll down, the bottom-right `Top` button returns to the top of the dashboard.
 
 Useful interpretation notes:
@@ -62,22 +74,27 @@ Use `Threads` view when you want to understand a work session as a group instead
 - Expanded calls are ordered oldest to newest by event timestamp, then cumulative token count.
 - Subagents with logged parent session ids are shown under the parent thread. Auto-review sessions without explicit parent ids may be attached by cwd and nearby activity and are marked as attached or inferred in the details.
 
-The same filters, pricing status, load limit, cards, and sort controls apply in both `Calls` and `Threads` views.
+The same filters, pricing status, load limit, cards, and sort controls apply in `Insights`, `Calls`, and `Threads` views.
 
 ## Details And Context
 
 ![Details panel showing aggregate fields for the selected usage row.](assets/dashboard-details.png)
 
-The details panel is intentionally field-heavy so the table can stay compact. On desktop, it sticks inside the viewport and scrolls internally when the selected call has more fields or loaded context than can fit on screen.
+The details panel is structured for progressive disclosure. On desktop, it sticks inside the viewport and scrolls internally when the selected call has more fields or loaded context than can fit on screen.
 
 For selected calls, the panel shows:
 
-- thread attachment and parent-thread fields
-- session id, turn id, timestamp, cwd, model, and reasoning effort
-- input, cached input, uncached input, output, reasoning output, and total tokens
-- estimated cost, cache savings, pricing model, and pricing status
-- context window size and context-window percentage
-- source JSONL file and line number
+- primary cost, cache, uncached input, context use, pricing status, and next action
+- thread attachment, source, parent-thread, and timestamp narrative
+- input, cached input, uncached input, output, reasoning output, cumulative tokens, and pricing fields
+- collapsed raw aggregate identifiers
+- collapsed source JSONL file and line metadata
+
+For selected threads, the panel shows:
+
+- estimated cost, attention score, cache ratio, max context use, pricing status, and next action
+- a compact thread timeline with recent calls, cost, cache, context, and pricing cues
+- direct, subagent, auto-review, attached-call, and spawned-thread relationship counts
 
 When served from localhost, the details panel includes `Load context` and `Include tool output`.
 
@@ -89,10 +106,10 @@ When served from localhost, the details panel includes `Load context` and `Inclu
 
 1. Start with `serve-dashboard --open`.
 2. Use `Refresh` after a Codex run finishes, or leave `Live` enabled while you work.
-3. Use `Threads` view to find the active work thread and any spawned subagent calls.
-4. Sort by `Cost` or `Tokens` to find expensive work.
-5. Sort by `Cache` to find calls with poor prompt-cache reuse.
-6. Filter to one model or reasoning effort when comparing efficiency.
+3. Start in `Insights` view and review the highest-severity attention cards.
+4. Use a preset when the question is already clear: highest-cost threads, context bloat, cache misses, pricing gaps, or estimated-price review.
+5. Use `Threads` view to find the active work thread and any spawned subagent calls.
+6. Sort by `Cost`, `Tokens`, `Cache`, or `Context` when you need manual comparison.
 7. Click into a row and use `Load context` only when aggregate fields are not enough to explain the call.
 
 ## Investigating Long Chat Growth

@@ -82,23 +82,32 @@
 codex-usage-tracker serve-dashboard --open</code></pre>
     <p>The server enables live aggregate refresh and on-demand context loading. Static file mode can still filter, sort, and inspect aggregate fields, but cannot refresh logs or load context.</p>
 
+    <h2>Insights View</h2>
+    <p>The dashboard opens in <code>Insights</code> view. It ranks costly threads, low cache reuse, context bloat, unpriced usage, estimated pricing, and reasoning-output spikes from aggregate fields only.</p>
+    <ul>
+      <li><code>Needs Attention</code> cards pair each signal with a next action.</li>
+      <li><code>Investigation Presets</code> apply a view, derived filter, sort order, and explanatory caption together.</li>
+      <li>Presets include highest-cost threads, context bloat, cache misses, pricing gaps, and estimated-price review.</li>
+    </ul>
+
     <h2>Calls View</h2>
     <img src="assets/dashboard-calls.png" alt="Calls view showing filters, totals, table rows, and details panel.">
-    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by time, thread, model, tokens, cost, cache, or signals. Hover or click a row to pin aggregate fields in <code>Call Details</code>.</p>
+    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by attention, time, thread, model, tokens, cost, cache, context, or signals. Hover or click a row to pin grouped aggregate fields in <code>Call Details</code>.</p>
     <ul>
       <li><code>Last call total</code> is the selected model call.</li>
       <li><code>Session cumulative</code> is the running total Codex logged for that session.</li>
       <li><code>Cached input</code> and <code>Uncached input</code> make cache behavior visible without storing transcript text.</li>
       <li>A cost with <code>*</code> means the pricing row is a marked best-guess estimate.</li>
+      <li>Raw aggregate identifiers and source file metadata are collapsed until you need them.</li>
     </ul>
 
     <h2>Threads View</h2>
     <img src="assets/dashboard-threads.png" alt="Threads view with one expanded thread and chronological child calls.">
-    <p>Use <code>Threads</code> view to understand a work session as a group. Expand a thread to see calls oldest to newest. Subagents with logged parent session ids are shown under their parent thread; inferred auto-review attachments are marked in the details panel.</p>
+    <p>Use <code>Threads</code> view to understand a work session as a group. Expand a thread to see calls oldest to newest. Subagents with logged parent session ids are shown under their parent thread; inferred auto-review attachments are marked in the details panel. Selected threads also show a compact timeline with cost, cache, context, pricing, and relationship cues.</p>
 
     <h2>Details And Context</h2>
     <img src="assets/dashboard-details.png" alt="Details panel showing aggregate usage fields for a selected call.">
-    <p>The details panel shows thread attachment, timestamps, cwd, model, reasoning effort, token fields, pricing fields, context use, and the source JSONL line. When served from localhost, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand.</p>
+    <p>The details panel shows primary cost, cache, context, pricing, and next-action signals first. It then groups thread narrative, token/pricing breakdowns, collapsed raw identifiers, and source metadata. When served from localhost, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand.</p>
 
     <h2>Investigating Long Chat Growth</h2>
     <p class="note">Prompt caching helps, but cached input is not free. Long-running chats can carry a large cached prefix into later turns, so usage can climb quickly even when the visible request looks small.</p>

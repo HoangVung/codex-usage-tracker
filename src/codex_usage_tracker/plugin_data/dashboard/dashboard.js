@@ -14,8 +14,14 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     const sortEl = document.getElementById('sort');
     const tableTitleEl = document.getElementById('tableTitle');
     const tableCaptionEl = document.getElementById('tableCaption');
+    const insightsViewEl = document.getElementById('insightsView');
     const callsViewEl = document.getElementById('callsView');
     const threadsViewEl = document.getElementById('threadsView');
+    const insightsPanelEl = document.getElementById('insightsPanel');
+    const insightCardsEl = document.getElementById('insightCards');
+    const presetListEl = document.getElementById('presetList');
+    const presetStatusEl = document.getElementById('presetStatus');
+    const clearPresetEl = document.getElementById('clearPreset');
     const refreshDashboardEl = document.getElementById('refreshDashboard');
     const autoRefreshEl = document.getElementById('autoRefresh');
     const loadLimitEl = document.getElementById('loadLimit');
@@ -43,14 +49,69 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     const liveRefreshSupported = window.location.protocol !== 'file:';
     const liveRefreshIntervalMs = 10000;
     const pageSize = 500;
-    let activeView = urlParams.get('view') === 'threads' ? 'threads' : 'calls';
+    let activeView = ['calls', 'threads', 'insights'].includes(urlParams.get('view')) ? urlParams.get('view') : 'insights';
     let sortKey = sortEl.value || 'time';
     let sortDirection = defaultSortDirection(sortKey);
+    let activePreset = '';
     let refreshInFlight = false;
     let autoRefreshTimer = null;
     let currentPage = 1;
     let initialThreadExpansionApplied = false;
     let initialDetailApplied = false;
+    const presetDefinitions = [
+      {
+        key: 'highest-cost',
+        label: 'Highest-cost threads',
+        description: 'Threads sorted by estimated spend, with subagents attached.',
+        view: 'threads',
+        sort: 'cost',
+        direction: 'desc',
+        caption: 'Highest-cost threads preset',
+        matches: () => true,
+      },
+      {
+        key: 'context-bloat',
+        label: 'Context bloat',
+        description: 'Calls over 60% context use or with very high cumulative tokens.',
+        view: 'calls',
+        sort: 'context',
+        direction: 'desc',
+        caption: 'Context bloat preset',
+        matches: row => Number(row.context_window_percent || 0) >= 0.6 || Number(row.cumulative_total_tokens || 0) >= 200000,
+      },
+      {
+        key: 'cache-misses',
+        label: 'Cache misses',
+        description: 'Low cache-ratio calls grouped by cwd, model, and thread.',
+        view: 'calls',
+        sort: 'cache',
+        direction: 'asc',
+        caption: 'Cache misses preset',
+        matches: row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < 0.3,
+      },
+      {
+        key: 'pricing-gaps',
+        label: 'Pricing gaps',
+        description: 'Unpriced usage that makes estimated cost totals incomplete.',
+        view: 'calls',
+        sort: 'total',
+        direction: 'desc',
+        pricingStatus: 'unpriced',
+        caption: 'Pricing gaps preset',
+        matches: row => !row.pricing_model,
+      },
+      {
+        key: 'estimated-review',
+        label: 'Estimated-price review',
+        description: 'Usage priced with marked best-guess estimates.',
+        view: 'calls',
+        sort: 'cost',
+        direction: 'desc',
+        pricingStatus: 'estimated',
+        caption: 'Estimated-price review preset',
+        matches: row => Boolean(row.pricing_estimated),
+      },
+    ];
     const money = (value, missingLabel = 'No price') => {
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
@@ -115,6 +176,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     }
     function sortLabel(key) {
       return {
+        attention: 'Needs attention',
         cache: 'Cache',
         context: 'Context use',
         cost: 'Cost',
@@ -250,12 +312,69 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           || (pricingStatus === 'official' && row.pricing_model && !row.pricing_estimated)
           || (pricingStatus === 'estimated' && row.pricing_estimated)
           || (pricingStatus === 'unpriced' && !row.pricing_model);
-        return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches;
+        return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches && presetMatchesRow(row);
       });
       rows.sort(compareCalls);
       return rows;
     }
+    function activePresetDefinition() {
+      return presetDefinitions.find(preset => preset.key === activePreset) || null;
+    }
+    function presetMatchesRow(row) {
+      const preset = activePresetDefinition();
+      return preset ? preset.matches(row) : true;
+    }
+    function applyPreset(key) {
+      const preset = presetDefinitions.find(candidate => candidate.key === key);
+      if (!preset) return;
+      activePreset = preset.key;
+      activeView = preset.view;
+      pricingStatusEl.value = preset.pricingStatus || '';
+      sortKey = preset.sort;
+      sortDirection = preset.direction || defaultSortDirection(preset.sort);
+      sortEl.value = preset.sort;
+      currentPage = 1;
+      render();
+    }
+    function clearPreset() {
+      activePreset = '';
+      pricingStatusEl.value = '';
+      sortKey = 'attention';
+      sortDirection = defaultSortDirection(sortKey);
+      sortEl.value = sortKey;
+      currentPage = 1;
+      render();
+    }
+    function clamp(value, min, max) {
+      return Math.min(Math.max(value, min), max);
+    }
+    function signalCount(row) {
+      return Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0;
+    }
+    function rowAttentionScore(row) {
+      const costScore = clamp(Number(row.estimated_cost_usd || 0) * 24, 0, 60);
+      const tokenScore = clamp(Number(row.total_tokens || 0) / 2500, 0, 36);
+      const lowCacheScore = Number(row.input_tokens || 0) > 0 ? clamp((0.5 - Number(row.cache_ratio || 0)) * 70, 0, 35) : 0;
+      const contextScore = clamp(Number(row.context_window_percent || 0) * 42, 0, 42);
+      const pricingScore = row.pricing_model ? (row.pricing_estimated ? 12 : 0) : 30;
+      return costScore + tokenScore + lowCacheScore + contextScore + pricingScore + signalCount(row) * 12;
+    }
+    function threadAttentionScore(group) {
+      const costScore = clamp(Number(group.estimatedCost || 0) * 24, 0, 72);
+      const tokenScore = clamp(Number(group.totalTokens || 0) / 3500, 0, 42);
+      const lowCacheScore = clamp((0.55 - Number(group.cacheRatio || 0)) * 70, 0, 38);
+      const contextScore = clamp(Number(group.maxContextUse || 0) * 45, 0, 45);
+      const pricingScore = group.pricingStatus === 'No price' ? 36 : group.pricingStatus === 'Estimated' || group.pricingStatus === 'Mixed' ? 18 : 0;
+      const relationScore = (group.subagentCount || 0) * 4 + (group.autoReviewCount || 0) * 6 + (group.attachedCount || 0) * 3;
+      return costScore + tokenScore + lowCacheScore + contextScore + pricingScore + relationScore + Number(group.signalCount || 0) * 10;
+    }
+    function severityForScore(score, hasPricingGap = false) {
+      if (score >= 95) return 'high';
+      if (score >= 48) return 'medium';
+      return hasPricingGap ? 'review' : 'review';
+    }
     function callSortValue(row, key) {
+      if (key === 'attention') return rowAttentionScore(row);
       if (key === 'cache') return Number(row.cache_ratio || 0);
       if (key === 'context') return Number(row.context_window_percent || 0);
       if (key === 'cost') return Number(row.estimated_cost_usd || 0);
@@ -344,6 +463,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       return groups;
     }
     function threadSortValue(group, key) {
+      if (key === 'attention') return group.attentionScore;
       if (key === 'cache') return group.cacheRatio;
       if (key === 'context') return group.maxContextUse;
       if (key === 'cost') return group.estimatedCost;
@@ -502,8 +622,12 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           subagentCount,
           autoReviewCount,
           attachedCount,
+          attentionScore: 0,
         };
       });
+      for (const group of groups) {
+        group.attentionScore = threadAttentionScore(group);
+      }
       return arrangeThreadGroups(groups);
     }
     function paginate(items) {
@@ -530,6 +654,138 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       }
       pageStatusEl.textContent = `${number.format(page.start + 1)}-${number.format(page.end)} of ${number.format(page.total)} ${itemLabel} · page ${number.format(currentPage)}/${number.format(page.pageCount)}`;
     }
+    function buildInsights(rows) {
+      const groups = groupThreads(rows);
+      const insights = [];
+      const topCostGroup = groups.filter(group => group.estimatedCost > 0).sort((a, b) => b.estimatedCost - a.estimatedCost || b.attentionScore - a.attentionScore)[0];
+      if (topCostGroup) {
+        insights.push({
+          title: 'Costliest thread',
+          value: pricingConfigured ? money(topCostGroup.estimatedCost) : 'Not configured',
+          body: `${topCostGroup.label} has ${number.format(topCostGroup.callCount)} calls and ${number.format(topCostGroup.totalTokens)} tokens.`,
+          severity: severityForScore(topCostGroup.attentionScore),
+          action: 'Open thread timeline',
+          preset: 'highest-cost',
+        });
+      }
+      const lowCacheRows = rows.filter(row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < 0.3);
+      if (lowCacheRows.length) {
+        const lowest = lowCacheRows.slice().sort((a, b) => Number(a.cache_ratio || 0) - Number(b.cache_ratio || 0))[0];
+        insights.push({
+          title: 'Low cache reuse',
+          value: pct(lowest.cache_ratio),
+          body: `${number.format(lowCacheRows.length)} calls are under 30% cache reuse. Start with ${rowThreadLabel(lowest)}.`,
+          severity: 'medium',
+          action: 'Apply cache-misses preset',
+          preset: 'cache-misses',
+        });
+      }
+      const highContextRows = rows.filter(row => Number(row.context_window_percent || 0) >= 0.6);
+      if (highContextRows.length) {
+        const highest = highContextRows.slice().sort((a, b) => Number(b.context_window_percent || 0) - Number(a.context_window_percent || 0))[0];
+        insights.push({
+          title: 'Context bloat',
+          value: pct(highest.context_window_percent),
+          body: `${number.format(highContextRows.length)} calls are at or above 60% context use.`,
+          severity: severityForScore(rowAttentionScore(highest)),
+          action: 'Apply context-bloat preset',
+          preset: 'context-bloat',
+        });
+      }
+      const unpricedTokens = rows.reduce((sum, row) => sum + (!row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
+      if (unpricedTokens) {
+        insights.push({
+          title: 'Unpriced usage',
+          value: number.format(unpricedTokens),
+          body: 'These tokens are omitted from estimated cost totals until pricing is configured.',
+          severity: 'review',
+          action: 'Review pricing gaps',
+          preset: 'pricing-gaps',
+        });
+      }
+      const estimatedTokens = rows.reduce((sum, row) => sum + (row.pricing_estimated ? Number(row.total_tokens || 0) : 0), 0);
+      if (estimatedTokens) {
+        insights.push({
+          title: 'Estimated pricing',
+          value: number.format(estimatedTokens),
+          body: 'Marked best-guess prices are included, but should be reviewed separately.',
+          severity: 'review',
+          action: 'Review estimates',
+          preset: 'estimated-review',
+        });
+      }
+      const reasoningRows = rows.filter(row => Number(row.reasoning_output_tokens || 0) > 0).sort((a, b) => Number(b.reasoning_output_tokens || 0) - Number(a.reasoning_output_tokens || 0));
+      if (reasoningRows[0]) {
+        insights.push({
+          title: 'Reasoning output spike',
+          value: number.format(reasoningRows[0].reasoning_output_tokens || 0),
+          body: `${rowThreadLabel(reasoningRows[0])} has the largest reasoning-output call in the current filter.`,
+          severity: severityForScore(rowAttentionScore(reasoningRows[0])),
+          action: 'Inspect selected call',
+          view: 'calls',
+          sort: 'signals',
+        });
+      }
+      return insights.slice(0, 6);
+    }
+    function renderInsightPanel(rows) {
+      if (activeView !== 'insights' && !activePreset) {
+        insightsPanelEl.hidden = true;
+        return;
+      }
+      insightsPanelEl.hidden = false;
+      renderPresetControls();
+      const insights = buildInsights(rows);
+      if (!insights.length) {
+        insightCardsEl.innerHTML = '<div class="empty-state">No attention signals match the current filters.</div>';
+        return;
+      }
+      insightCardsEl.innerHTML = insights.map((insight, index) => {
+        const severity = insight.severity || 'review';
+        return `
+          <article class="insight-card" data-severity="${escapeHtml(severity)}">
+            <div class="insight-card-header">
+              <h3>${escapeHtml(insight.title)}</h3>
+              <span class="severity-chip ${escapeHtml(severity)}">${escapeHtml(severity === 'high' ? 'High' : severity === 'medium' ? 'Medium' : 'Review')}</span>
+            </div>
+            <strong>${escapeHtml(insight.value)}</strong>
+            <p>${escapeHtml(insight.body)}</p>
+            <button class="insight-action" type="button" data-insight-index="${index}">${escapeHtml(insight.action)}</button>
+          </article>
+        `;
+      }).join('');
+      insightCardsEl.querySelectorAll('[data-insight-index]').forEach(button => {
+        const insight = insights[Number(button.dataset.insightIndex)];
+        button.addEventListener('click', () => {
+          if (insight.preset) {
+            applyPreset(insight.preset);
+            return;
+          }
+          activeView = insight.view || 'calls';
+          if (insight.sort) {
+            sortKey = insight.sort;
+            sortDirection = defaultSortDirection(insight.sort);
+            sortEl.value = sortKey;
+          }
+          currentPage = 1;
+          render();
+        });
+      });
+    }
+    function renderPresetControls() {
+      const preset = activePresetDefinition();
+      clearPresetEl.hidden = !preset;
+      presetStatusEl.textContent = preset ? `${preset.caption}: ${preset.description}` : 'No preset applied.';
+      presetListEl.innerHTML = presetDefinitions.map(candidate => `
+        <button class="preset-card" type="button" data-preset="${escapeHtml(candidate.key)}" aria-pressed="${candidate.key === activePreset ? 'true' : 'false'}">
+          <span class="preset-copy"><b>${escapeHtml(candidate.label)}</b><span>${escapeHtml(candidate.description)}</span></span>
+          <span class="preset-chip">Run</span>
+        </button>
+      `).join('');
+      presetListEl.querySelectorAll('[data-preset]').forEach(button => {
+        button.addEventListener('click', () => applyPreset(button.dataset.preset));
+      });
+    }
     function render() {
       const rows = filtered();
       rowsEl.textContent = '';
@@ -547,10 +803,14 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       document.getElementById('priceCoverage').textContent = pct(totalTokens ? pricedTokens / totalTokens : 0);
       document.getElementById('estimatedTokens').textContent = number.format(estimatedTokens);
       document.getElementById('unpricedTokens').textContent = number.format(unpricedTokens);
+      insightsViewEl.setAttribute('aria-pressed', activeView === 'insights' ? 'true' : 'false');
       callsViewEl.setAttribute('aria-pressed', activeView === 'calls' ? 'true' : 'false');
       threadsViewEl.setAttribute('aria-pressed', activeView === 'threads' ? 'true' : 'false');
+      renderInsightPanel(rows);
       if (activeView === 'threads') {
         renderThreads(rows);
+      } else if (activeView === 'insights') {
+        renderThreads(rows, 'insights');
       } else {
         renderCalls(rows);
       }
@@ -560,7 +820,9 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       const page = paginate(rows);
       updatePager(page, 'calls');
       tableTitleEl.textContent = 'Model Calls';
-      tableCaptionEl.textContent = `Showing individual model calls sorted by ${tableCaptionEl.dataset.sortDescription}. ${loadedRowsDescription()}.`;
+      const preset = activePresetDefinition();
+      const prefix = preset ? `${preset.caption}. ` : '';
+      tableCaptionEl.textContent = `${prefix}Showing individual model calls sorted by ${tableCaptionEl.dataset.sortDescription}. ${loadedRowsDescription()}.`;
       for (const row of page.items) {
         const tr = document.createElement('tr');
         const flags = Array.isArray(row.efficiency_flags) ? row.efficiency_flags : [];
@@ -596,9 +858,9 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No calls match the current filters.</td></tr>';
       }
     }
-    function renderThreads(rows) {
+    function renderThreads(rows, mode = 'threads') {
       const groups = groupThreads(rows);
-      if (!initialThreadExpansionApplied && activeView === 'threads') {
+      if (!initialThreadExpansionApplied && (activeView === 'threads' || activeView === 'insights')) {
         const expansion = urlParams.get('expand');
         if (expansion === 'all') {
           groups.forEach(group => expandedThreads.add(group.key));
@@ -609,8 +871,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       }
       const page = paginate(groups);
       updatePager(page, 'threads');
-      tableTitleEl.textContent = 'Threads';
-      tableCaptionEl.textContent = `Showing ${number.format(groups.length)} threads from ${number.format(rows.length)} filtered calls, sorted by ${tableCaptionEl.dataset.sortDescription}. ${loadedRowsDescription()}. Click a thread to expand its calls.`;
+      tableTitleEl.textContent = mode === 'insights' ? 'Top Threads by Attention Score' : 'Threads';
+      const preset = activePresetDefinition();
+      const prefix = preset ? `${preset.caption}. ` : '';
+      tableCaptionEl.textContent = `${prefix}Showing ${number.format(groups.length)} threads from ${number.format(rows.length)} filtered calls, sorted by ${tableCaptionEl.dataset.sortDescription}. ${loadedRowsDescription()}. Click a thread to expand its calls.`;
       for (const group of page.items) {
         const tr = document.createElement('tr');
         const expanded = expandedThreads.has(group.key);
@@ -627,7 +891,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         tr.tabIndex = 0;
         tr.setAttribute('role', 'button');
         tr.setAttribute('aria-expanded', expanded ? 'true' : 'false');
-        tr.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${group.label} calls`);
+        tr.setAttribute('aria-label', `${expanded ? 'Collapse' : 'Expand'} ${group.label} calls. Attention score ${Math.round(group.attentionScore)}.`);
         tr.innerHTML = `
           <td>${renderTimeCell(group.latestActivity)}</td>
           <td>
@@ -635,7 +899,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
                 <span class="thread-toggle" aria-hidden="true">${expanded ? '-' : '+'}</span>
               <span class="thread-meta">
                 <span class="thread-name">${group.renderAsChild ? '<span class="thread-relation">spawned</span> ' : ''}${escapeHtml(truncate(group.label, 72))}</span>
-                <span class="thread-subtle">${escapeHtml(threadNotes)}</span>
+                <span class="thread-subtle">${escapeHtml(threadNotes)} · attention ${number.format(Math.round(group.attentionScore))}</span>
               </span>
             </div>
           </td>
@@ -773,62 +1037,157 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       `).join('');
       return `<p class="context-note">${escapeHtml(note)}</p>${body || '<p class="context-note">No context entries found for this call.</p>'}`;
     }
+    function pricingStatusText(row) {
+      if (!row.pricing_model) return 'No configured price';
+      return row.pricing_estimated ? 'Best-guess estimate' : 'Configured price';
+    }
+    function nextActionForRow(row) {
+      if (!row.pricing_model) return 'Configure pricing before trusting cost totals.';
+      if (Number(row.cache_ratio || 0) < 0.3 && Number(row.input_tokens || 0) > 0) return 'Compare fresh input with the previous turn before continuing.';
+      if (Number(row.context_window_percent || 0) >= 0.6) return 'Inspect the thread timeline and consider starting a fresh thread.';
+      if (Number(row.reasoning_output_tokens || 0) > Number(row.output_tokens || 0)) return 'Review whether reasoning effort is appropriate for this task.';
+      return 'Use the aggregate fields first; load context only if the signal is still unclear.';
+    }
+    function fieldsList(fields, className = 'detail-kv') {
+      return `<dl class="${className}">${fields.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(short(value))}</dd>`).join('')}</dl>`;
+    }
+    function detailCollapse(title, fields) {
+      return `
+        <details class="detail-collapse">
+          <summary>${escapeHtml(title)}</summary>
+          <div class="detail-collapse-body">${fieldsList(fields)}</div>
+        </details>
+      `;
+    }
+    function timelineSeverity(value) {
+      if (value >= 0.65) return 'high';
+      if (value >= 0.35) return 'medium';
+      return 'low';
+    }
+    function timelineWidth(value) {
+      return `${Math.round(clamp(Number(value || 0), 0, 1) * 100)}%`;
+    }
+    function renderThreadTimeline(group) {
+      const calls = group.calls.slice(-5);
+      if (!calls.length) return '<p>No calls in this thread.</p>';
+      return `<div class="timeline-list">${calls.map(row => {
+        const contextUse = Number(row.context_window_percent || 0);
+        return `
+          <div class="timeline-item">
+            <div class="timeline-time">${escapeHtml(formatTimestamp(row.event_timestamp, 'Unknown'))}</div>
+            <div>
+              <div class="timeline-title">${escapeHtml(sourceLabel(row))} · ${escapeHtml(short(row.model))}</div>
+              <div class="timeline-meta">${escapeHtml(number.format(row.total_tokens || 0))} tokens · ${escapeHtml(money(row.estimated_cost_usd))} · cache ${escapeHtml(pct(row.cache_ratio))}</div>
+              <div class="signal-strip">
+                <span class="flag">context ${escapeHtml(pct(contextUse))}</span>
+                <span class="flag">${escapeHtml(pricingStatusText(row))}</span>
+              </div>
+              <div class="mini-bar" title="Context use ${escapeHtml(pct(contextUse))}"><span class="${timelineSeverity(contextUse)}" style="width: ${timelineWidth(contextUse)}"></span></div>
+            </div>
+          </div>
+        `;
+      }).join('')}</div>`;
+    }
     function showDetail(row) {
       const attachment = rowAttachment(row);
-      const fields = [
-        ['Thread', attachment.label],
-        ['Thread attachment', attachment.relation],
-        ['Session', row.session_id],
-        ['Thread source', row.thread_source || 'user'],
-        ['Subagent type', row.subagent_type || 'None'],
-        ['Agent role', row.agent_role || 'None'],
-        ['Agent nickname', row.agent_nickname || 'None'],
-        ['Parent session', row.parent_session_id || 'None'],
-        ['Parent thread', resolvedParentThreadName(row) || 'None'],
-        ['Parent updated', resolvedParentSessionUpdatedAt(row) ? formatTimestamp(resolvedParentSessionUpdatedAt(row)) : 'None'],
-        ['Turn', row.turn_id],
-        ['Timestamp', formatTimestamp(row.event_timestamp)],
-        ['Model', row.model],
-        ['Reasoning', row.effort],
-        ['Cwd', row.cwd],
-        ['Last call total', number.format(row.total_tokens || 0)],
-        ['Last call input', number.format(row.input_tokens || 0)],
-        ['Cached input', number.format(row.cached_input_tokens || 0)],
-        ['Uncached input', number.format(row.uncached_input_tokens || 0)],
-        ['Output', number.format(row.output_tokens || 0)],
-        ['Reasoning output', number.format(row.reasoning_output_tokens || 0)],
-        ['Estimated cost', money(row.estimated_cost_usd)],
-        ['Pricing model', row.pricing_model || 'No configured price'],
-        ['Pricing status', row.pricing_estimated ? 'Best-guess estimate' : row.pricing_model ? 'Configured price' : 'No configured price'],
-        ['Estimated cache savings', money(row.estimated_cache_savings_usd)],
-        ['Efficiency signals', Array.isArray(row.efficiency_flags) && row.efficiency_flags.length ? row.efficiency_flags.join(', ') : 'None'],
-        ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],
-        ['Context window', number.format(row.model_context_window || 0)],
-        ['Context use', pct(row.context_window_percent)],
-        ['Source line', `${row.source_file}:${row.line_number}`],
-      ];
-      detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(short(value))}</dd>`).join('') + '</dl>' + contextControls(row);
+      const flags = Array.isArray(row.efficiency_flags) && row.efficiency_flags.length ? row.efficiency_flags.join(', ') : 'None';
+      detailEl.innerHTML = `
+        <div class="detail-stack">
+          <div class="detail-card primary">
+            <h3>Cost, cache, and context</h3>
+            ${fieldsList([
+              ['Estimated cost', money(row.estimated_cost_usd)],
+              ['Cache ratio', pct(row.cache_ratio)],
+              ['Uncached input', number.format(row.uncached_input_tokens || 0)],
+              ['Context use', pct(row.context_window_percent)],
+              ['Pricing status', pricingStatusText(row)],
+              ['Next action', nextActionForRow(row)],
+            ])}
+          </div>
+          <div class="detail-card">
+            <h3>Thread narrative</h3>
+            ${fieldsList([
+              ['Thread', attachment.label],
+              ['Thread attachment', attachment.relation],
+              ['Source', sourceLabel(row)],
+              ['Parent thread', resolvedParentThreadName(row) || 'None'],
+              ['Timestamp', formatTimestamp(row.event_timestamp)],
+            ])}
+          </div>
+          <div class="detail-card">
+            <h3>Token and pricing breakdown</h3>
+            ${fieldsList([
+              ['Last call total', number.format(row.total_tokens || 0)],
+              ['Last call input', number.format(row.input_tokens || 0)],
+              ['Cached input', number.format(row.cached_input_tokens || 0)],
+              ['Output', number.format(row.output_tokens || 0)],
+              ['Reasoning output', number.format(row.reasoning_output_tokens || 0)],
+              ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],
+              ['Pricing model', row.pricing_model || 'No configured price'],
+              ['Cache savings', money(row.estimated_cache_savings_usd)],
+              ['Efficiency signals', flags],
+            ])}
+          </div>
+          ${detailCollapse('Raw aggregate identifiers', [
+            ['Session', row.session_id],
+            ['Turn', row.turn_id],
+            ['Thread source', row.thread_source || 'user'],
+            ['Subagent type', row.subagent_type || 'None'],
+            ['Agent role', row.agent_role || 'None'],
+            ['Agent nickname', row.agent_nickname || 'None'],
+            ['Parent session', row.parent_session_id || 'None'],
+            ['Parent updated', resolvedParentSessionUpdatedAt(row) ? formatTimestamp(resolvedParentSessionUpdatedAt(row)) : 'None'],
+            ['Cwd', row.cwd],
+          ])}
+          ${detailCollapse('Source file and line', [
+            ['Source line', `${row.source_file}:${row.line_number}`],
+            ['Context window', number.format(row.model_context_window || 0)],
+          ])}
+          ${contextControls(row)}
+        </div>
+      `;
       bindContextButtons(row);
     }
     function showThreadDetail(group) {
-      const fields = [
-        ['Thread', group.label],
-        ['Latest activity', formatTimestamp(group.latestActivity)],
-        ['Calls', number.format(group.callCount)],
-        ['Total tokens', number.format(group.totalTokens)],
-        ['Estimated cost', pricingConfigured ? money(group.estimatedCost) : 'Not configured'],
-        ['Cache ratio', pct(group.cacheRatio)],
-        ['Pricing status', group.pricingStatus],
-        ['Efficiency signals', number.format(group.signalCount)],
-        ['Subagent calls', number.format(group.subagentCount)],
-        ['Auto-review calls', number.format(group.autoReviewCount)],
-        ['Attached calls', number.format(group.attachedCount)],
-        ['Spawned from', group.parentThreadLabel || 'None'],
-        ['Spawned threads', number.format(group.childThreadCount || 0)],
-        ['Spawned child calls', number.format(group.childCallCount || 0)],
-        ['Max context use', pct(group.maxContextUse)],
-      ];
-      detailEl.innerHTML = '<dl>' + fields.map(([key, value]) => `<dt>${escapeHtml(key)}</dt><dd>${escapeHtml(short(value))}</dd>`).join('') + '</dl>';
+      detailEl.innerHTML = `
+        <div class="detail-stack">
+          <div class="detail-card primary">
+            <h3>Thread attention summary</h3>
+            ${fieldsList([
+              ['Estimated cost', pricingConfigured ? money(group.estimatedCost) : 'Not configured'],
+              ['Attention score', number.format(Math.round(group.attentionScore))],
+              ['Cache ratio', pct(group.cacheRatio)],
+              ['Max context use', pct(group.maxContextUse)],
+              ['Pricing status', group.pricingStatus],
+              ['Next action', group.maxContextUse >= 0.6 || group.cacheRatio < 0.3 ? 'Inspect the timeline before continuing this thread.' : 'Expand calls or select a row for call-level details.'],
+            ])}
+          </div>
+          <div class="detail-card">
+            <h3>Thread timeline</h3>
+            ${renderThreadTimeline(group)}
+          </div>
+          <div class="detail-card">
+            <h3>Relationships</h3>
+            ${fieldsList([
+              ['Thread', group.label],
+              ['Calls', number.format(group.callCount)],
+              ['Subagent calls', number.format(group.subagentCount)],
+              ['Auto-review calls', number.format(group.autoReviewCount)],
+              ['Attached calls', number.format(group.attachedCount)],
+              ['Spawned from', group.parentThreadLabel || 'None'],
+              ['Spawned threads', number.format(group.childThreadCount || 0)],
+              ['Spawned child calls', number.format(group.childCallCount || 0)],
+            ])}
+          </div>
+          ${detailCollapse('Secondary thread fields', [
+            ['Latest activity', formatTimestamp(group.latestActivity)],
+            ['Total tokens', number.format(group.totalTokens)],
+            ['Efficiency signals', number.format(group.signalCount)],
+            ['Model mix', group.modelSummary],
+            ['Reasoning mix', group.effortSummary],
+          ])}
+        </div>
+      `;
     }
     function setView(view) {
       activeView = view;
@@ -900,8 +1259,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         if (document.visibilityState === 'visible') refreshDashboardData(false);
       }, liveRefreshIntervalMs);
     }
+    insightsViewEl.addEventListener('click', () => setView('insights'));
     callsViewEl.addEventListener('click', () => setView('calls'));
     threadsViewEl.addEventListener('click', () => setView('threads'));
+    clearPresetEl.addEventListener('click', clearPreset);
     refreshDashboardEl.addEventListener('click', () => refreshDashboardData(true));
     loadLimitEl.addEventListener('change', () => {
       currentPage = 1;

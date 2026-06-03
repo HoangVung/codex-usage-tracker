@@ -8,6 +8,8 @@ Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggre
 
 ## Dashboard Preview
 
+The dashboard opens with an insight-first summary that ranks threads and calls needing attention before you start sorting tables.
+
 ![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png)
 
 ![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
@@ -28,8 +30,9 @@ Use this when you want to answer questions like:
 - Which active project directories are consuming the most usage?
 - Did a change in workflow, model choice, or reasoning mode improve efficiency?
 
-The dashboard is intentionally split into two views:
+The dashboard is intentionally split into three views:
 
+- `Insights`: start with ranked issues, investigation presets, and top threads by attention score.
 - `Calls`: inspect individual model calls, token fields, pricing status, cache ratio, reasoning output, and context-window percentage.
 - `Threads`: group calls by Codex thread, expand a thread chronologically, and see spawned subagents and inferred auto-review work in context.
 
@@ -55,7 +58,7 @@ Practical takeaway: when old context is no longer relevant, starting a fresh thr
 - Optionally includes `~/.codex/archived_sessions/*.jsonl`.
 - Stores aggregate-only usage metrics in local SQLite at `~/.codex-usage-tracker/usage.sqlite3`.
 - Exposes MCP tools for refresh, summaries, session detail, lazy call context, CSV export, and dashboard generation.
-- Generates a static hoverable dashboard with flat calls and threaded-by-thread views.
+- Generates a static hoverable dashboard with insight summaries, flat calls, and threaded-by-thread views.
 - Can serve the dashboard from localhost so raw logged context is loaded only after a row action.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
 - Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
@@ -177,8 +180,11 @@ When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle
 
 Dashboard behavior:
 
-- The flat `Calls` view opens newest-first for inspecting individual model calls.
+- The `Insights` view opens first with ranked attention cards, investigation presets, and top threads by attention score.
+- The flat `Calls` view is available for inspecting individual model calls.
 - The `Threads` view groups filtered calls by thread, shows the most recently active thread first by default, and lets multiple threads stay expanded.
+- Investigation presets can jump directly to highest-cost threads, context bloat, cache misses, pricing gaps, or estimated-price review.
+- The details panel groups primary cost/cache/context signals first, then thread narrative, token/pricing breakdowns, and collapsed raw aggregate metadata.
 - Expanded thread calls are ordered oldest to newest so you can see how usage grew across the conversation.
 - Spawned subagents with logged parent sessions are shown under their parent thread when Codex logs enough metadata.
 - Auto-review sessions do not currently log an explicit parent session id, so the dashboard can infer attachment by cwd and nearby activity and marks that relationship in the details panel.

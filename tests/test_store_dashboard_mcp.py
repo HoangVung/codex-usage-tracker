@@ -187,8 +187,14 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "session cumulative" in dashboard_js.lower()
     assert "Estimated Cost" in dashboard
     assert "estimated_cost_usd" in dashboard
+    assert "insightsView" in dashboard
     assert "callsView" in dashboard
     assert "threadsView" in dashboard
+    assert "Needs Attention" in dashboard
+    assert "Investigation Presets" in dashboard
+    assert "presetDefinitions" in dashboard_js
+    assert "renderInsightPanel" in dashboard_js
+    assert "attentionScore" in dashboard_js
     assert "thread-row" in dashboard_surface
     assert "thread-call-table" in dashboard_surface
     assert "Thread attachment" in dashboard_js
@@ -228,9 +234,12 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "updatePager(page, 'threads')" in dashboard_js
     assert "All calls" in dashboard
     assert "/api/usage" in dashboard_js
+    assert "detail-card primary" in dashboard_js
+    assert "Thread timeline" in dashboard_js
+    assert "Raw aggregate identifiers" in dashboard_js
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
-    assert '<option value="time" selected>Newest calls</option>' in dashboard
+    assert '<option value="attention" selected>Needs attention</option>' in dashboard
 
 
 def test_dashboard_guide_link_can_use_docs_url_override(tmp_path: Path, monkeypatch) -> None:
