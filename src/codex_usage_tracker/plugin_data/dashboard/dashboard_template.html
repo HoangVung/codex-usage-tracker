@@ -32,6 +32,7 @@
       <span class="status-chip">Aggregate only</span>
       <span id="liveStatus" class="live-status">Static snapshot loaded.</span>
       <span id="pricingSource" class="source-line"></span>
+      <span id="allowanceSource" class="source-line"></span>
       __GUIDE_LINK__
     </div>
   </header>
@@ -41,7 +42,7 @@
       <label>Model<select id="model"><option value="">All models</option></select></label>
       <label>Reasoning<select id="effort"><option value="">All efforts</option></select></label>
       <label>Pricing<select id="pricingStatus"><option value="">All pricing</option><option value="official">Official/configured</option><option value="estimated">Estimated</option><option value="unpriced">Unpriced</option></select></label>
-      <label>Sort<select id="sort"><option value="attention" selected>Needs attention</option><option value="time">Newest calls</option><option value="thread">Thread name</option><option value="model">Model</option><option value="effort">Reasoning</option><option value="total">Most tokens</option><option value="cost">Highest estimated cost</option><option value="cache">Lowest cache ratio</option><option value="signals">Most signals</option><option value="context">Highest context use</option></select></label>
+      <label>Sort<select id="sort"><option value="attention" selected>Needs attention</option><option value="time">Newest calls</option><option value="thread">Thread name</option><option value="model">Model</option><option value="effort">Reasoning</option><option value="total">Most tokens</option><option value="cost">Highest estimated cost</option><option value="usage">Highest Codex credits</option><option value="cache">Lowest cache ratio</option><option value="signals">Most signals</option><option value="context">Highest context use</option></select></label>
     </div>
     <div class="cards">
       <div class="card"><span>Visible Calls</span><strong id="visibleCalls">0</strong></div>
@@ -50,15 +51,15 @@
       <div class="card"><span>Reasoning Output</span><strong id="reasoningTokens">0</strong></div>
       <div class="card"><span>Estimated Cost</span><strong id="estimatedCost">$0.00</strong></div>
       <div class="card"><span>Price Coverage</span><strong id="priceCoverage">0.0%</strong></div>
-      <div class="card"><span>Estimated Tokens</span><strong id="estimatedTokens">0</strong></div>
-      <div class="card"><span>Unpriced Tokens</span><strong id="unpricedTokens">0</strong></div>
+      <div class="card"><span>Codex Credits</span><strong id="usageCredits">0</strong></div>
+      <div class="card"><span>Usage Remaining</span><strong id="allowanceImpact">Set limits</strong></div>
     </div>
     <section id="insightsPanel" class="insights-panel" aria-labelledby="insightsTitle">
       <div class="insights-layout">
         <div>
           <div class="section-heading">
             <h2 id="insightsTitle">Needs Attention</h2>
-            <p id="insightsCaption">Ranked by cost, cache reuse, context pressure, and pricing confidence.</p>
+            <p id="insightsCaption">Ranked by cost, usage credits, cache reuse, context pressure, and pricing confidence.</p>
           </div>
           <div id="insightCards" class="insight-cards" aria-live="polite"></div>
         </div>

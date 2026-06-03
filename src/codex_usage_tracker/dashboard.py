@@ -10,7 +10,16 @@ from importlib import resources
 from pathlib import Path
 from typing import Any
 
-from codex_usage_tracker.paths import DEFAULT_DASHBOARD_PATH, DEFAULT_PRICING_PATH
+from codex_usage_tracker.allowance import (
+    annotate_rows_with_allowance,
+    load_allowance_config,
+    summarize_allowance_usage,
+)
+from codex_usage_tracker.paths import (
+    DEFAULT_ALLOWANCE_PATH,
+    DEFAULT_DASHBOARD_PATH,
+    DEFAULT_PRICING_PATH,
+)
 from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
 from codex_usage_tracker.store import query_dashboard_event_count, query_dashboard_events
 from codex_usage_tracker.threads import annotate_thread_attachments
@@ -20,6 +29,7 @@ def dashboard_payload(
     db_path: Path,
     limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
+    allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     since: str | None = None,
 ) -> dict[str, object]:
     """Return aggregate-only dashboard data without rendering HTML."""
@@ -28,11 +38,21 @@ def dashboard_payload(
         query_dashboard_events(db_path=db_path, limit=limit, since=since)
     )
     pricing = load_pricing_config(pricing_path)
+    allowance = load_allowance_config(allowance_path)
+    annotated_rows = annotate_rows_with_allowance(
+        annotate_rows_with_efficiency(rows, pricing),
+        allowance,
+    )
+    allowance_summary = summarize_allowance_usage(annotated_rows, allowance)
     normalized_limit = _normalize_limit(limit)
     return {
-        "rows": annotate_rows_with_efficiency(rows, pricing),
+        "rows": annotated_rows,
         "pricing_configured": pricing.loaded and not pricing.error,
         "pricing_source": pricing.source,
+        "allowance_configured": allowance.loaded and not allowance.error,
+        "allowance_source": allowance_summary["source"],
+        "allowance_windows": allowance_summary["windows"],
+        "allowance_error": allowance_summary["error"],
         "loaded_row_count": len(rows),
         "total_available_rows": query_dashboard_event_count(db_path=db_path, since=since),
         "limit": normalized_limit,
@@ -45,6 +65,7 @@ def generate_dashboard(
     output_path: Path = DEFAULT_DASHBOARD_PATH,
     limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
+    allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     since: str | None = None,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,6 +76,7 @@ def generate_dashboard(
             db_path=db_path,
             limit=limit,
             pricing_path=pricing_path,
+            allowance_path=allowance_path,
             since=since,
         ),
         ensure_ascii=True,

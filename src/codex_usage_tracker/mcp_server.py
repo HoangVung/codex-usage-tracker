@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from codex_usage_tracker.allowance import write_allowance_template
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
@@ -17,6 +18,7 @@ from codex_usage_tracker.formatting import (
     format_session,
 )
 from codex_usage_tracker.paths import (
+    DEFAULT_ALLOWANCE_PATH,
     DEFAULT_CODEX_HOME,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_DB_PATH,
@@ -169,6 +171,7 @@ def generate_usage_dashboard(
         output_path=output,
         limit=limit,
         pricing_path=DEFAULT_PRICING_PATH,
+        allowance_path=DEFAULT_ALLOWANCE_PATH,
         since=since,
     )
     return {"dashboard_path": str(generated), "file_url": generated.resolve().as_uri()}
@@ -189,6 +192,14 @@ def init_usage_pricing_config(force: bool = False) -> dict[str, Any]:
 
     output = write_pricing_template(DEFAULT_PRICING_PATH, force=force)
     return {"pricing_path": str(output)}
+
+
+@mcp.tool()
+def init_usage_allowance_config(force: bool = False) -> dict[str, Any]:
+    """Write a local template for optional Codex allowance windows."""
+
+    output = write_allowance_template(DEFAULT_ALLOWANCE_PATH, force=force)
+    return {"allowance_path": str(output)}
 
 
 @mcp.tool()

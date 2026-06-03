@@ -80,42 +80,44 @@
     <p>For the best experience, run the localhost dashboard server:</p>
     <pre><code>codex-usage-tracker update-pricing
 codex-usage-tracker serve-dashboard --open</code></pre>
+    <p>For optional allowance context, run <code>codex-usage-tracker init-allowance</code> and copy current 5-hour or weekly remaining usage from Codex Usage or <code>/status</code> into the local template.</p>
     <p>The server enables live aggregate refresh and on-demand context loading. Static file mode can still filter, sort, and inspect aggregate fields, but cannot refresh logs or load context.</p>
 
     <h2>Insights View</h2>
     <img src="assets/dashboard-insights.png" alt="Insights view with ranked attention cards, investigation presets, and top threads by attention score.">
-    <p>The dashboard opens in <code>Insights</code> view. It ranks costly threads, low cache reuse, context bloat, unpriced usage, estimated pricing, and reasoning-output spikes from aggregate fields only.</p>
+    <p>The dashboard opens in <code>Insights</code> view. It ranks costly threads, Codex allowance usage, low cache reuse, context bloat, unpriced usage, estimated pricing, and reasoning-output spikes from aggregate fields only.</p>
     <ul>
       <li><code>Needs Attention</code> cards pair each signal with a next action.</li>
       <li><code>Investigation Presets</code> apply a view, derived filter, sort order, and explanatory caption together.</li>
-      <li>Presets include highest-cost threads, context bloat, cache misses, pricing gaps, and estimated-price review.</li>
+      <li>Presets include highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, and estimated-price review.</li>
     </ul>
 
     <h2>Calls View</h2>
     <img src="assets/dashboard-calls.png" alt="Calls view showing filters, totals, table rows, and details panel.">
-    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by attention, time, thread, model, tokens, cost, cache, context, or signals. Hover or click a row to pin grouped aggregate fields in <code>Call Details</code>.</p>
+    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by attention, time, thread, model, tokens, cost, highest Codex credits, cache, context, or signals. Hover or click a row to pin grouped aggregate fields in <code>Call Details</code>. Top cards show Codex credit usage and optional usage remaining.</p>
     <ul>
       <li><code>Last call total</code> is the selected model call.</li>
       <li><code>Session cumulative</code> is the running total Codex logged for that session.</li>
       <li><code>Cached input</code> and <code>Uncached input</code> make cache behavior visible without storing transcript text.</li>
       <li>A cost with <code>*</code> means the pricing row is a marked best-guess estimate.</li>
+      <li>Codex credits are estimated from aggregate input, cached-input, and output counters using bundled or locally configured rate-card values.</li>
       <li>Raw aggregate identifiers and source file metadata are collapsed until you need them.</li>
     </ul>
 
     <h2>Threads View</h2>
     <img src="assets/dashboard-threads.png" alt="Threads view with one expanded thread and chronological child calls.">
-    <p>Use <code>Threads</code> view to understand a work session as a group. Expand a thread to see calls oldest to newest. Subagents with logged parent session ids are shown under their parent thread; inferred auto-review attachments are marked in the details panel. Selected threads also show a compact timeline with cost, cache, context, pricing, and relationship cues.</p>
+    <p>Use <code>Threads</code> view to understand a work session as a group. Expand a thread to see calls oldest to newest. Subagents with logged parent session ids are shown under their parent thread; inferred auto-review attachments are marked in the details panel. Selected threads also show a compact timeline with cost, credits, cache, context, pricing, and relationship cues.</p>
 
     <h2>Details And Context</h2>
     <img src="assets/dashboard-details.png" alt="Details panel showing aggregate usage fields for a selected call.">
-    <p>The details panel shows primary cost, cache, context, pricing, and next-action signals first. It then groups thread narrative, token/pricing breakdowns, collapsed raw identifiers, and source metadata. When served from localhost, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand.</p>
+    <p>The details panel shows primary cost, Codex credits, allowance impact, cache, context, pricing, and next-action signals first. It then groups thread narrative, token/pricing breakdowns, collapsed raw identifiers, and source metadata. When served from localhost, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand.</p>
 
     <h2>Investigating Long Chat Growth</h2>
     <p class="note">Prompt caching helps, but cached input is not free. Long-running chats can carry a large cached prefix into later turns, so usage can climb quickly even when the visible request looks small.</p>
     <p>Watch <code>Cached input</code>, <code>Uncached input</code>, <code>Session cumulative</code>, <code>Context use</code>, and <code>Cache ratio</code> together. When old context is no longer useful, starting a fresh Codex thread may be more efficient than carrying a large cached history forward.</p>
 
     <h2>Privacy Model</h2>
-    <p>The dashboard includes session ids, thread names, cwd values, source file paths, timestamps, model labels, reasoning effort, token counts, costs, and derived ratios. It does not include prompts, assistant responses, raw tool output, pasted secrets, message snippets, or transcript text.</p>
+    <p>The dashboard includes session ids, thread names, cwd values, source file paths, timestamps, model labels, reasoning effort, token counts, cost estimates, Codex credit estimates, optional manually entered allowance windows, and derived ratios. It does not include prompts, assistant responses, raw tool output, pasted secrets, message snippets, or transcript text. Remaining 5-hour and weekly allowance is not read from Codex logs automatically.</p>
   </main>
 </body>
 </html>

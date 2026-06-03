@@ -17,6 +17,7 @@ from urllib.parse import parse_qs, urlparse
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import dashboard_payload, generate_dashboard
 from codex_usage_tracker.paths import (
+    DEFAULT_ALLOWANCE_PATH,
     DEFAULT_CODEX_HOME,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_PRICING_PATH,
@@ -28,6 +29,7 @@ def serve_dashboard(
     db_path: Path,
     output_path: Path = DEFAULT_DASHBOARD_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
+    allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     limit: int = 5000,
     since: str | None = None,
     host: str = "127.0.0.1",
@@ -45,6 +47,7 @@ def serve_dashboard(
         output_path=output_path,
         limit=limit,
         pricing_path=pricing_path,
+        allowance_path=allowance_path,
         since=since,
     )
     handler = partial(
@@ -52,6 +55,7 @@ def serve_dashboard(
         directory=str(output.parent),
         db_path=db_path,
         pricing_path=pricing_path,
+        allowance_path=allowance_path,
         limit=limit,
         since=since,
         codex_home=codex_home,
@@ -80,6 +84,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         *args: object,
         db_path: Path,
         pricing_path: Path,
+        allowance_path: Path,
         limit: int,
         since: str | None,
         codex_home: Path,
@@ -91,6 +96,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
     ) -> None:
         self._db_path = db_path
         self._pricing_path = pricing_path
+        self._allowance_path = allowance_path
         self._limit = limit
         self._since = since
         self._codex_home = codex_home
@@ -188,6 +194,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
                 db_path=self._db_path,
                 limit=limit,
                 pricing_path=self._pricing_path,
+                allowance_path=self._allowance_path,
                 since=self._since,
             )
         except sqlite3.Error as exc:

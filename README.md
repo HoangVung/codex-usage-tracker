@@ -4,7 +4,7 @@ Local-first analytics for Codex token usage.
 
 > **Unofficial project:** Codex Usage Tracker is an independent open-source project. It is not made by, affiliated with, endorsed by, sponsored by, or supported by OpenAI. OpenAI and Codex are trademarks of OpenAI; this project only reads local log files from your machine.
 
-Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggregate usage counters into SQLite, and gives you a dashboard, CLI, and MCP tools for understanding where tokens are going. It is built for investigating real usage patterns while keeping prompts, assistant messages, tool output, and pasted secrets out of the stored index and generated dashboard HTML.
+Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggregate usage counters into SQLite, and gives you a dashboard, CLI, and MCP tools for understanding where tokens and Codex usage credits are going. It is built for investigating real usage patterns while keeping prompts, assistant messages, tool output, and pasted secrets out of the stored index and generated dashboard HTML.
 
 ## Dashboard Preview
 
@@ -16,7 +16,7 @@ The dashboard opens with an insight-first summary that ranks threads and calls n
 
 ![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
 
-![Call Details panel showing aggregate token, pricing, context, and thread attachment fields.](docs/assets/dashboard-details.png)
+![Call Details panel showing aggregate token, pricing, Codex credit, allowance, context, and thread attachment fields.](docs/assets/dashboard-details.png)
 
 These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content.
 
@@ -25,6 +25,7 @@ These screenshots use synthetic aggregate fixture data. They do not contain prom
 Use this when you want to answer questions like:
 
 - Which Codex threads are using the most tokens or estimated cost?
+- Which threads and calls are consuming the most Codex usage credits?
 - Which models and reasoning efforts are driving usage?
 - Do long-running chats get more expensive over time?
 - Are subagents, auto-reviews, or review passes attached to the right parent work?
@@ -35,8 +36,8 @@ Use this when you want to answer questions like:
 The dashboard is intentionally split into three views:
 
 - `Insights`: start with ranked issues, investigation presets, and top threads by attention score.
-- `Calls`: inspect individual model calls, token fields, pricing status, cache ratio, reasoning output, and context-window percentage.
-- `Threads`: group calls by Codex thread, expand a thread chronologically, and see spawned subagents and inferred auto-review work in context.
+- `Calls`: inspect individual model calls, token fields, Codex credit estimates, pricing status, cache ratio, reasoning output, and context-window percentage.
+- `Threads`: group calls by Codex thread, expand a thread chronologically, and see spawned subagents, inferred auto-review work, and credit growth in context.
 
 ## Important Pattern: Long Chats Can Bloat Fast
 
@@ -64,6 +65,8 @@ Practical takeaway: when old context is no longer relevant, starting a fresh thr
 - Can serve the dashboard from localhost so raw logged context is loaded only after a row action.
 - Provides a read-only doctor command for local plugin/MCP setup checks.
 - Optionally estimates costs from a local pricing file that can be refreshed from OpenAI's published pricing docs.
+- Estimates Codex usage credits from aggregate token counters and a bundled OpenAI Codex rate-card snapshot.
+- Optionally displays local 5-hour and weekly allowance windows copied from Codex Usage or `/status`.
 - Tracks aggregate subagent metadata, including explicit parent session ids when Codex logs them.
 
 The tracker intentionally does not store prompts, assistant messages, tool outputs, pasted secrets, or raw transcript snippets in SQLite, CSV exports, or generated dashboard HTML. The optional localhost server can read redacted, size-limited context from the original JSONL file on demand.
@@ -123,11 +126,12 @@ Then:
 
 1. Leave `Live` enabled while working, or click `Refresh` after a Codex run finishes.
 2. Start in `Insights` view and scan the `Needs Attention` cards.
-3. Use an investigation preset when you already know the question: highest-cost threads, context bloat, cache misses, pricing gaps, or estimated-price review.
-4. Open `Threads` view to find the active work thread and any spawned subagent or auto-review calls.
-5. Expand an expensive thread and read calls oldest to newest.
-6. Hover or click rows to inspect exact aggregate fields in `Call Details`.
-7. Use `Load context` only when the aggregate fields are not enough; context is fetched on demand from the local source JSONL and is not saved into SQLite or the dashboard.
+3. Optionally run `codex-usage-tracker init-allowance` and copy current remaining usage from Codex Usage or `/status` into `~/.codex-usage-tracker/allowance.json`.
+4. Use an investigation preset when you already know the question: highest-cost threads, highest-credit calls, context bloat, cache misses, pricing gaps, or estimated-price review.
+5. Open `Threads` view to find the active work thread and any spawned subagent or auto-review calls.
+6. Expand an expensive or high-credit thread and read calls oldest to newest.
+7. Hover or click rows to inspect exact aggregate fields in `Call Details`.
+8. Use `Load context` only when the aggregate fields are not enough; context is fetched on demand from the local source JSONL and is not saved into SQLite or the dashboard.
 
 For a screenshot-driven walkthrough, see [`docs/dashboard-guide.md`](docs/dashboard-guide.md).
 Generated dashboards also link to a bundled local HTML copy of the guide. Set `CODEX_USAGE_TRACKER_DOCS_URL` if you want generated dashboards to point at a hosted docs page instead.
@@ -178,10 +182,12 @@ When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle
 Dashboard behavior:
 
 - The `Insights` view opens first with ranked attention cards, investigation presets, and top threads by attention score.
+- Top cards include Codex credit usage and optional usage remaining, replacing the older estimated-token and unpriced-token cards.
 - The flat `Calls` view is available for inspecting individual model calls.
 - The `Threads` view groups filtered calls by thread, shows the most recently active thread first by default, and lets multiple threads stay expanded.
-- Investigation presets can jump directly to highest-cost threads, context bloat, cache misses, pricing gaps, or estimated-price review.
-- The details panel groups primary cost/cache/context signals first, then thread narrative, token/pricing breakdowns, and collapsed raw aggregate metadata.
+- Investigation presets can jump directly to highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
+- Cost cells show both USD estimates and Codex credit estimates when a model maps to the rate card.
+- The details panel groups primary cost/cache/context/allowance signals first, then thread narrative, token/pricing breakdowns, and collapsed raw aggregate metadata.
 - Expanded thread calls are ordered oldest to newest so you can see how usage grew across the conversation.
 - Spawned subagents with logged parent sessions are shown under their parent thread when Codex logs enough metadata.
 - Auto-review sessions do not currently log an explicit parent session id, so the dashboard can infer attachment by cwd and nearby activity and marks that relationship in the details panel.
@@ -190,6 +196,7 @@ Dashboard behavior:
 Useful investigations:
 
 - Sort `Threads` by `Tokens` or `Cost` to find the conversations worth reviewing first.
+- Sort by `Highest Codex credits` to find calls or threads consuming the most usage allowance.
 - Sort by `Cache` to find threads that are mostly new context versus mostly reused context.
 - Sort by `Context` to find calls approaching the model context window.
 - Filter by model or reasoning effort to compare usage patterns across model choices.
@@ -246,11 +253,22 @@ codex-usage-tracker init-pricing
 
 Edit `~/.codex-usage-tracker/pricing.json` with USD-per-million-token rates for any local overrides or models that are not present in the OpenAI pricing table. Normal reports never contact the network; only `update-pricing` refreshes the local pricing cache.
 
+Enable optional allowance context:
+
+```bash
+codex-usage-tracker init-allowance
+```
+
+Edit `~/.codex-usage-tracker/allowance.json` with the 5-hour and weekly remaining values you see in Codex Settings > Usage, the Codex Usage dashboard, or `/status` during an active CLI session. The tracker can store `remaining_percent`, `reset_at`, `remaining_credits`, and `total_credits` for each window. If `total_credits` is present, call and thread details show the estimated share of that allowance; otherwise the dashboard shows the copied remaining percentages and reset context.
+
+Credit usage estimates are calculated from Codex's aggregate input, cached-input, and output token counters using the bundled OpenAI Codex rate-card snapshot from `https://help.openai.com/en/articles/20001106-codex-rate-card` and `https://developers.openai.com/codex/pricing`. Direct model matches are marked exact. Local aliases and inferred labels, such as code-review usage mapped to GPT-5.3-Codex, are marked estimated. Normal reports do not contact the network for allowance or credit estimates.
+
 ## Current Limitations
 
 - This is a sidecar dashboard and plugin, not a native Codex chat overlay. Native hover tooltips inside Codex chat would require a transcript UI extension point that is not part of this v1 surface.
 - Token counts come from Codex's logged counters. The tracker does not re-tokenize prompts or reconstruct usage from raw text.
 - Pricing is optional and local. Rows are unpriced when no matching model rate is configured, and some Codex-specific labels may use marked best-guess estimates.
+- Remaining 5-hour and weekly allowance is not read automatically from Codex. Add `~/.codex-usage-tracker/allowance.json` when you want the dashboard to show your current copied allowance state.
 - Parent-child thread relationships are only as good as the metadata Codex logs. Explicit parent session ids are preferred; inferred auto-review attachments are labeled as inferred.
 - On-demand context loading reads from the original local JSONL source. It is redacted and size-limited, but it is still local raw log context and should be treated as sensitive.
 
@@ -295,6 +313,7 @@ plugin directory.
 - `export_usage_csv`
 - `init_usage_pricing_config`
 - `update_usage_pricing_config`
+- `init_usage_allowance_config`
 
 ## Data Privacy
 
@@ -311,6 +330,8 @@ For MCP users, `usage_call_context` is additionally disabled unless the MCP serv
 
 Cost estimates are calculated only from aggregate token fields and your local pricing config. They are omitted when no matching model price is configured. Pricing refreshes pull only OpenAI's public pricing markdown and do not send local usage data anywhere.
 
+Codex credit estimates are calculated only from aggregate token fields and bundled or locally configured rate-card values. The optional allowance config is local and stores only the remaining percentages, reset times, or credit totals you manually enter.
+
 ## Test
 
 ```bash
@@ -320,6 +341,7 @@ python -m build
 python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
+codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help

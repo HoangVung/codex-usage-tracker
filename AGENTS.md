@@ -19,10 +19,12 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `src/codex_usage_tracker/schema.py` - single source of truth for persisted usage-event columns.
 - `src/codex_usage_tracker/threads.py` - thread attachment inference used by dashboard payload generation.
 - `src/codex_usage_tracker/pricing_config.py`, `pricing_openai.py`, `pricing_estimates.py`, and `costing.py` - pricing config, source parsing, estimate policy, and cost calculations behind the `pricing.py` facade.
+- `src/codex_usage_tracker/allowance.py` - Codex credit-rate and optional local allowance-window helpers.
 - `src/codex_usage_tracker/plugin_installer.py` - package-owned local Codex plugin installer.
 - `src/codex_usage_tracker/plugin_data/` - plugin assets, dashboard template/assets, local dashboard guide, screenshots, and skill files bundled into wheels.
 - `src/codex_usage_tracker/server.py` - localhost dashboard server with live aggregate refresh and lazy context endpoints.
 - `~/.codex-usage-tracker/pricing.json` - optional local-only pricing config, never committed.
+- `~/.codex-usage-tracker/allowance.json` - optional local-only copied allowance state, never committed.
 - `.codex-plugin/plugin.json` - Codex plugin manifest.
 - `.mcp.json` - MCP server configuration for Codex.
 - `scripts/install_local_plugin.py` - compatibility wrapper around `codex-usage-tracker install-plugin`.
@@ -54,6 +56,7 @@ codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help
+codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
 codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5
@@ -67,7 +70,8 @@ codex-usage-tracker expensive --limit 5
 - Store only selected aggregate session metadata for subagents, including parent thread labels; do not persist raw session instructions or source JSON.
 - Keep fixture data synthetic.
 - Keep local SQLite databases, CSV exports, HTML dashboards, caches, and virtualenvs out of git.
-- Do not hard-code real current model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides. Internal Codex model estimates must be explicitly marked as estimates with source and rationale metadata.
+- Do not hard-code real current USD model pricing in source; refresh the local config from OpenAI's published pricing docs or use manual local overrides. Internal Codex model estimates must be explicitly marked as estimates with source and rationale metadata.
+- Source-stamped Codex credit rate-card snapshots must include source/date metadata, confidence labels, and local override support. Manually copied allowance remaining values stay in local config only.
 
 ## Definition Of Done
 
@@ -81,6 +85,7 @@ codex-usage-tracker expensive --limit 5
 - Wheel and source distribution builds include plugin assets and the Codex skill.
 - `scripts/check_release.py --dist` passes before any public release.
 - Pricing coverage clearly separates configured, estimated, and unpriced model usage.
+- Codex credit coverage clearly separates exact rate-card matches, inferred aliases, and missing credit rates.
 - Dashboard Calls and Threads views share filters, totals, and aggregate-only hover details.
 - Dashboard usage docs are updated when the visible dashboard workflow changes, and screenshots must be generated from synthetic data only.
 - Dashboard aggregate refresh is localhost-only and keeps generated HTML aggregate-only; context loading is lazy, localhost-only, explicit, redacted, and not embedded in the static HTML payload.

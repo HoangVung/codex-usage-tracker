@@ -187,6 +187,17 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "session cumulative" in dashboard_js.lower()
     assert "Estimated Cost" in dashboard
     assert "estimated_cost_usd" in dashboard
+    assert "Codex Credits" in dashboard
+    assert "Usage Remaining" in dashboard
+    assert "usageCredits" in dashboard
+    assert "allowanceImpact" in dashboard
+    assert "usage_credits" in dashboard
+    assert "usage_credit_confidence" in dashboard
+    assert "Credit rates:" in dashboard_js
+    assert "Codex allowance usage" in dashboard_js
+    assert "Highest Codex credits" in dashboard
+    assert "Estimated Tokens" not in dashboard
+    assert "Unpriced Tokens" not in dashboard
     assert "insightsView" in dashboard
     assert "callsView" in dashboard
     assert "threadsView" in dashboard
@@ -237,9 +248,13 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "detail-card primary" in dashboard_js
     assert "Thread timeline" in dashboard_js
     assert "Raw aggregate identifiers" in dashboard_js
+    assert "Codex credits" in dashboard_js
+    assert "Allowance impact" in dashboard_js
+    assert "Credit model" in dashboard_js
     assert 'data-sort-key="time"' in dashboard
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="attention" selected>Needs attention</option>' in dashboard
+    assert '<option value="usage">Highest Codex credits</option>' in dashboard
 
 
 def test_dashboard_guide_link_can_use_docs_url_override(tmp_path: Path, monkeypatch) -> None:
@@ -268,6 +283,7 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
         directory=str(tmp_path),
         db_path=db_path,
         pricing_path=pricing_path,
+        allowance_path=tmp_path / "allowance.json",
         limit=5000,
         since=None,
         codex_home=codex_home,
@@ -312,6 +328,9 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert all_payload["limit"] is None
     assert all_payload["limit_label"] == "All"
     assert limited_payload["pricing_configured"] is True
+    assert limited_payload["allowance_configured"] is False
+    assert limited_payload["allowance_source"]["name"] == "OpenAI Codex rate card"
+    assert limited_payload["rows"][0]["usage_credits"] is not None
     assert "refreshed_at" in limited_payload
     assert "SECRET RAW PROMPT" not in json.dumps(limited_payload)
 
@@ -333,6 +352,7 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
         directory=str(tmp_path),
         db_path=tmp_path / "usage.sqlite3",
         pricing_path=tmp_path / "pricing.json",
+        allowance_path=tmp_path / "allowance.json",
         limit=5000,
         since=None,
         codex_home=tmp_path / ".codex",
@@ -407,10 +427,12 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     db_path = tmp_path / "usage.sqlite3"
     dashboard_path = tmp_path / "dashboard.html"
     pricing_path = _write_pricing(tmp_path / "pricing.json")
+    allowance_path = tmp_path / "allowance.json"
     monkeypatch.setattr(mcp_server, "DEFAULT_CODEX_HOME", codex_home)
     monkeypatch.setattr(mcp_server, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_DASHBOARD_PATH", dashboard_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_PRICING_PATH", pricing_path)
+    monkeypatch.setattr(mcp_server, "DEFAULT_ALLOWANCE_PATH", allowance_path)
     monkeypatch.setattr(mcp_server, "update_pricing_from_openai_docs", _fake_pricing_update)
 
     refresh = mcp_server.refresh_usage_index()
@@ -425,6 +447,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     context = mcp_server.usage_call_context(record_id=record_id)
     dashboard = mcp_server.generate_usage_dashboard()
     pricing_update = mcp_server.update_usage_pricing_config()
+    allowance = mcp_server.init_usage_allowance_config()
     doctor = mcp_server.usage_doctor()
 
     assert refresh["parsed_events"] == 4
@@ -442,6 +465,8 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert dashboard["dashboard_path"] == str(dashboard_path)
     assert pricing_update["model_count"] == 1
     assert pricing_update["source_url"] == "https://example.test/pricing.md"
+    assert allowance["allowance_path"] == str(allowance_path)
+    assert allowance_path.exists()
     assert "Codex Usage Tracker doctor" in doctor
 
 

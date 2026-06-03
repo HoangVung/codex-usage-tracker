@@ -9,6 +9,7 @@ import webbrowser
 from pathlib import Path
 
 from codex_usage_tracker import __version__
+from codex_usage_tracker.allowance import write_allowance_template
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
@@ -17,6 +18,7 @@ from codex_usage_tracker.formatting import (
     format_session,
 )
 from codex_usage_tracker.paths import (
+    DEFAULT_ALLOWANCE_PATH,
     DEFAULT_CODEX_HOME,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_DB_PATH,
@@ -72,6 +74,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
+    parser.add_argument("--allowance", type=Path, default=DEFAULT_ALLOWANCE_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_doctor_parser(subparsers)
     _add_install_plugin_parser(subparsers)
@@ -84,6 +87,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pricing_coverage_parser(subparsers)
     _add_export_parser(subparsers)
     _add_pricing_parsers(subparsers)
+    _add_allowance_parser(subparsers)
     return parser
 
 
@@ -254,6 +258,17 @@ def _add_pricing_parsers(
     )
 
 
+def _add_allowance_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    allowance = subparsers.add_parser(
+        "init-allowance",
+        help="Write a local template for optional Codex allowance windows",
+    )
+    allowance.add_argument("--output", type=Path, default=None)
+    allowance.add_argument("--force", action="store_true")
+
+
 def _run_doctor(args: argparse.Namespace) -> int:
     report = run_doctor(db_path=args.db, pricing_path=args.pricing)
     print(json.dumps(report, indent=2) if args.as_json else format_doctor(report))
@@ -326,6 +341,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
         output_path=args.output,
         limit=args.limit,
         pricing_path=args.pricing,
+        allowance_path=args.allowance,
         since=args.since,
     )
     print(f"Wrote dashboard to {output}")
@@ -342,6 +358,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
         output_path=args.output,
         limit=args.limit,
         pricing_path=args.pricing,
+        allowance_path=args.allowance,
         since=args.since,
     )
     print(f"Opening dashboard at {output}")
@@ -360,6 +377,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
         db_path=args.db,
         output_path=args.output,
         pricing_path=args.pricing,
+        allowance_path=args.allowance,
         limit=args.limit,
         since=args.since,
         host=args.host,
@@ -428,6 +446,12 @@ def _run_update_pricing(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_init_allowance(args: argparse.Namespace) -> int:
+    output = write_allowance_template(args.output or args.allowance, force=args.force)
+    print(f"Wrote allowance template to {output}")
+    return 0
+
+
 _COMMAND_HANDLERS = {
     "doctor": _run_doctor,
     "install-plugin": _run_install_plugin,
@@ -443,6 +467,7 @@ _COMMAND_HANDLERS = {
     "export": _run_export,
     "init-pricing": _run_init_pricing,
     "update-pricing": _run_update_pricing,
+    "init-allowance": _run_init_allowance,
 }
 
 if __name__ == "__main__":

@@ -3,6 +3,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     let data = payloadRows(initialPayload);
     let pricingConfigured = Boolean(initialPayload.pricing_configured);
     let pricingSource = initialPayload.pricing_source || {};
+    let allowanceConfigured = Boolean(initialPayload.allowance_configured);
+    let allowanceSource = initialPayload.allowance_source || {};
+    let allowanceWindows = Array.isArray(initialPayload.allowance_windows) ? initialPayload.allowance_windows : [];
+    let allowanceError = initialPayload.allowance_error || '';
     let totalAvailableRows = Number(initialPayload.total_available_rows || data.length);
     let loadedLimit = payloadLimit(initialPayload);
     const rowsEl = document.getElementById('rows');
@@ -111,12 +115,29 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         caption: 'Estimated-price review preset',
         matches: row => Boolean(row.pricing_estimated),
       },
+      {
+        key: 'usage-credits',
+        label: 'Highest Codex credits',
+        description: 'Calls sorted by estimated impact on Codex usage allowance.',
+        view: 'calls',
+        sort: 'usage',
+        direction: 'desc',
+        caption: 'Highest Codex credits preset',
+        matches: row => Number(row.usage_credits || 0) > 0,
+      },
     ];
     const money = (value, missingLabel = 'No price') => {
       if (value === null || value === undefined) return missingLabel;
       const amount = Number(value) || 0;
       if (amount > 0 && amount < 0.01) return `$${amount.toFixed(4)}`;
       return `$${amount.toFixed(2)}`;
+    };
+    const credits = (value, missingLabel = 'No rate') => {
+      if (value === null || value === undefined) return missingLabel;
+      const amount = Number(value) || 0;
+      if (amount > 0 && amount < 1) return amount.toFixed(2);
+      if (amount < 100) return amount.toFixed(1);
+      return number.format(Math.round(amount));
     };
     const pct = value => `${((Number(value) || 0) * 100).toFixed(1)}%`;
     const short = (value, fallback = 'Unknown') => value || fallback;
@@ -186,6 +207,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         thread: 'Thread',
         time: 'Time',
         total: 'Tokens',
+        usage: 'Codex credits',
       }[key] || 'Sort';
     }
     function setSort(key, direction = null) {
@@ -249,6 +271,92 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     function rebuildDashboardIndexes() {
       rowByRecordId = new Map(data.map(row => [row.record_id, row]));
       threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
+    }
+    function usageCreditValue(row) {
+      return row.usage_credits === null || row.usage_credits === undefined ? null : Number(row.usage_credits || 0);
+    }
+    function usageCreditStatusText(row) {
+      if (usageCreditValue(row) === null) return 'No mapped Codex credit rate';
+      if (row.usage_credit_confidence === 'exact') return 'Official rate-card match';
+      if (row.usage_credit_confidence === 'estimated') return 'Inferred model mapping';
+      return short(row.usage_credit_confidence, 'Configured rate');
+    }
+    function usageCreditsWithStatus(row) {
+      const value = usageCreditValue(row);
+      return value === null ? 'No mapped rate' : `${credits(value)} credits · ${usageCreditStatusText(row)}`;
+    }
+    function costUsageCell(costText, creditValue) {
+      const usage = creditValue === null || creditValue === undefined ? 'No credit rate' : `${credits(creditValue)} cr`;
+      return `<span class="metric-stack"><span>${escapeHtml(costText)}</span><span class="metric-sub">${escapeHtml(usage)}</span></span>`;
+    }
+    function sumUsageCredits(rows) {
+      return rows.reduce((sum, row) => {
+        const value = usageCreditValue(row);
+        return value === null ? sum : sum + value;
+      }, 0);
+    }
+    function creditCoverageRatio(rows) {
+      const totalTokens = rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
+      const ratedTokens = rows.reduce((sum, row) => sum + (usageCreditValue(row) === null ? 0 : Number(row.total_tokens || 0)), 0);
+      return totalTokens ? ratedTokens / totalTokens : 0;
+    }
+    function allowanceWindowText(totalCredits, mode = 'impact') {
+      if (!allowanceWindows.length) return '';
+      const labels = allowanceWindows.map(window => {
+        const label = short(window.label || window.key, 'Window');
+        const total = Number(window.total_credits || 0);
+        const remainingCredits = window.remaining_credits === null || window.remaining_credits === undefined ? null : Number(window.remaining_credits);
+        const remainingPercent = window.remaining_percent === null || window.remaining_percent === undefined ? null : Number(window.remaining_percent);
+        if (mode === 'remaining-card' && remainingPercent !== null && Number.isFinite(remainingPercent)) {
+          return `${label} ${pct(remainingPercent)}`;
+        }
+        if (mode === 'remaining-card' && remainingCredits !== null && Number.isFinite(remainingCredits)) {
+          return `${label} ${credits(remainingCredits)} cr left`;
+        }
+        if (mode === 'impact' && total > 0) {
+          return `${label} ${pct(totalCredits / total)} of allowance`;
+        }
+        if (mode === 'impact' && remainingCredits !== null && Number.isFinite(remainingCredits)) {
+          return `${label} ${credits(totalCredits)} used vs ${credits(remainingCredits)} remaining`;
+        }
+        if (remainingPercent !== null && Number.isFinite(remainingPercent)) {
+          return `${label} ${pct(remainingPercent)} remaining`;
+        }
+        if (remainingCredits !== null && Number.isFinite(remainingCredits)) {
+          return `${label} ${credits(remainingCredits)} credits remaining`;
+        }
+        if (total > 0) {
+          return `${label} ${credits(totalCredits)} of ${credits(total)} credits`;
+        }
+        return `${label} configured`;
+      });
+      return labels.join(mode === 'remaining-card' ? '\n' : ' · ');
+    }
+    function allowanceImpactText(totalCredits) {
+      const windowImpact = allowanceWindowText(totalCredits, 'remaining-card') || allowanceWindowText(totalCredits, 'impact');
+      if (windowImpact) return windowImpact;
+      if (allowanceError) return 'Allowance config error';
+      return allowanceConfigured ? 'Allowance configured' : 'Set limits';
+    }
+    function rowAllowanceImpact(row) {
+      const value = usageCreditValue(row);
+      if (value === null) return 'No mapped Codex credit rate';
+      const impact = allowanceWindowText(value, 'impact');
+      return impact || `${credits(value)} credits counted toward Codex usage limits`;
+    }
+    function updateAllowanceSourceLine() {
+      const sourceEl = document.getElementById('allowanceSource');
+      const sourceName = allowanceSource.name || 'Codex credit rates';
+      const coverage = creditCoverageRatio(data);
+      sourceEl.textContent = `Credit rates: ${sourceName}`;
+      sourceEl.title = [
+        allowanceSource.url ? `Source: ${allowanceSource.url}` : '',
+        allowanceSource.fetched_at ? `rate card snapshot ${allowanceSource.fetched_at}` : '',
+        `Credit coverage ${pct(coverage)} of loaded tokens.`,
+        allowanceWindows.length ? `Allowance windows: ${allowanceWindows.map(window => short(window.label || window.key)).join(', ')}` : 'Run codex-usage-tracker init-allowance to add remaining usage windows.',
+        allowanceWindows.some(window => window.reset_at) ? `Resets: ${allowanceWindows.map(window => window.reset_at ? `${short(window.label || window.key)} ${formatTimestamp(window.reset_at, window.reset_at)}` : '').filter(Boolean).join('; ')}` : '',
+        allowanceError ? `Allowance config error: ${allowanceError}` : '',
+      ].filter(Boolean).join(' ');
     }
     function rebuildSelectOptions(select, values, label) {
       const previous = select.value;
@@ -357,7 +465,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       const lowCacheScore = Number(row.input_tokens || 0) > 0 ? clamp((0.5 - Number(row.cache_ratio || 0)) * 70, 0, 35) : 0;
       const contextScore = clamp(Number(row.context_window_percent || 0) * 42, 0, 42);
       const pricingScore = row.pricing_model ? (row.pricing_estimated ? 12 : 0) : 30;
-      return costScore + tokenScore + lowCacheScore + contextScore + pricingScore + signalCount(row) * 12;
+      const usageScore = clamp(Number(row.usage_credits || 0) * 2.5, 0, 48);
+      return costScore + usageScore + tokenScore + lowCacheScore + contextScore + pricingScore + signalCount(row) * 12;
     }
     function threadAttentionScore(group) {
       const costScore = clamp(Number(group.estimatedCost || 0) * 24, 0, 72);
@@ -365,8 +474,9 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       const lowCacheScore = clamp((0.55 - Number(group.cacheRatio || 0)) * 70, 0, 38);
       const contextScore = clamp(Number(group.maxContextUse || 0) * 45, 0, 45);
       const pricingScore = group.pricingStatus === 'No price' ? 36 : group.pricingStatus === 'Estimated' || group.pricingStatus === 'Mixed' ? 18 : 0;
+      const usageScore = clamp(Number(group.usageCredits || 0) * 2.4, 0, 72);
       const relationScore = (group.subagentCount || 0) * 4 + (group.autoReviewCount || 0) * 6 + (group.attachedCount || 0) * 3;
-      return costScore + tokenScore + lowCacheScore + contextScore + pricingScore + relationScore + Number(group.signalCount || 0) * 10;
+      return costScore + usageScore + tokenScore + lowCacheScore + contextScore + pricingScore + relationScore + Number(group.signalCount || 0) * 10;
     }
     function severityForScore(score, hasPricingGap = false) {
       if (score >= 95) return 'high';
@@ -383,6 +493,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (key === 'signals') return Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0;
       if (key === 'thread') return textValue(rowThreadLabel(row));
       if (key === 'time') return String(row.event_timestamp || '');
+      if (key === 'usage') return Number(row.usage_credits || 0);
       return Number(row.total_tokens || 0);
     }
     function compareCalls(a, b) {
@@ -472,6 +583,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (key === 'signals') return group.signalCount;
       if (key === 'thread') return textValue(group.label);
       if (key === 'time') return String(group.latestActivity || '');
+      if (key === 'usage') return group.usageCredits;
       return group.totalTokens;
     }
     function compareThreads(a, b) {
@@ -579,6 +691,14 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (estimated.length > 0 || priced.length < rows.length) return 'Mixed';
       return 'Configured';
     }
+    function creditStatusFor(rows) {
+      const rated = rows.filter(row => usageCreditValue(row) !== null);
+      const estimated = rows.filter(row => row.usage_credit_confidence === 'estimated');
+      if (rated.length === 0) return 'No mapped rate';
+      if (estimated.length === rows.length) return 'Estimated mapping';
+      if (estimated.length > 0 || rated.length < rows.length) return 'Mixed';
+      return 'Official rate-card match';
+    }
     function groupThreads(rows) {
       const map = new Map();
       for (const row of rows) {
@@ -595,6 +715,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         const inputTokens = calls.reduce((sum, row) => sum + Number(row.input_tokens || 0), 0);
         const cachedTokens = calls.reduce((sum, row) => sum + Number(row.cached_input_tokens || 0), 0);
         const estimatedCost = calls.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
+        const usageCredits = sumUsageCredits(calls);
         const signalCount = calls.reduce((sum, row) => sum + (Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0), 0);
         const latestActivity = calls.reduce((latest, row) => String(row.event_timestamp || '') > latest ? String(row.event_timestamp || '') : latest, '');
         const maxContextUse = calls.reduce((max, row) => Math.max(max, Number(row.context_window_percent || 0)), 0);
@@ -615,9 +736,11 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           effortSummary,
           totalTokens,
           estimatedCost,
+          usageCredits,
           cacheRatio: inputTokens ? cachedTokens / inputTokens : 0,
           maxContextUse,
           pricingStatus: pricingStatusFor(calls),
+          creditStatus: creditStatusFor(calls),
           signalCount,
           subagentCount,
           autoReviewCount,
@@ -690,6 +813,18 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           severity: severityForScore(rowAttentionScore(highest)),
           action: 'Apply context-bloat preset',
           preset: 'context-bloat',
+        });
+      }
+      const usageCredits = sumUsageCredits(rows);
+      if (usageCredits > 0) {
+        const creditCoverage = creditCoverageRatio(rows);
+        insights.push({
+          title: 'Codex allowance usage',
+          value: `${credits(usageCredits)} credits`,
+          body: allowanceWindowText(usageCredits, 'impact') || allowanceWindowText(usageCredits, 'remaining') || `${pct(creditCoverage)} of visible tokens map to Codex credit rates.`,
+          severity: severityForScore(clamp(usageCredits * 2.4, 0, 140)),
+          action: 'Review highest-credit calls',
+          preset: 'usage-credits',
         });
       }
       const unpricedTokens = rows.reduce((sum, row) => sum + (!row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
@@ -796,13 +931,13 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       document.getElementById('reasoningTokens').textContent = number.format(rows.reduce((sum, row) => sum + Number(row.reasoning_output_tokens || 0), 0));
       const estimatedCost = rows.reduce((sum, row) => sum + Number(row.estimated_cost_usd || 0), 0);
       const pricedTokens = rows.reduce((sum, row) => sum + (row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
-      const estimatedTokens = rows.reduce((sum, row) => sum + (row.pricing_estimated ? Number(row.total_tokens || 0) : 0), 0);
-      const unpricedTokens = rows.reduce((sum, row) => sum + (!row.pricing_model ? Number(row.total_tokens || 0) : 0), 0);
       const totalTokens = rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
+      const usageCredits = sumUsageCredits(rows);
       document.getElementById('estimatedCost').textContent = pricingConfigured ? money(estimatedCost) : 'Not configured';
       document.getElementById('priceCoverage').textContent = pct(totalTokens ? pricedTokens / totalTokens : 0);
-      document.getElementById('estimatedTokens').textContent = number.format(estimatedTokens);
-      document.getElementById('unpricedTokens').textContent = number.format(unpricedTokens);
+      document.getElementById('usageCredits').textContent = credits(usageCredits);
+      document.getElementById('allowanceImpact').textContent = allowanceImpactText(usageCredits);
+      document.getElementById('allowanceImpact').title = allowanceWindowText(usageCredits, 'remaining') || 'Add ~/.codex-usage-tracker/allowance.json to show 5h and weekly remaining usage.';
       insightsViewEl.setAttribute('aria-pressed', activeView === 'insights' ? 'true' : 'false');
       callsViewEl.setAttribute('aria-pressed', activeView === 'calls' ? 'true' : 'false');
       threadsViewEl.setAttribute('aria-pressed', activeView === 'threads' ? 'true' : 'false');
@@ -836,7 +971,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           <td><span class="pill model-pill" data-full-label="${escapeHtml(short(row.model))}">${escapeHtml(short(row.model))}</span></td>
           <td>${escapeHtml(short(row.effort))}</td>
           <td class="num">${number.format(row.total_tokens || 0)}</td>
-          <td class="num">${escapeHtml(row.pricing_estimated ? `${money(row.estimated_cost_usd)}*` : money(row.estimated_cost_usd))}</td>
+          <td class="num">${costUsageCell(row.pricing_estimated ? `${money(row.estimated_cost_usd)}*` : money(row.estimated_cost_usd), usageCreditValue(row))}</td>
           <td class="num">${pct(row.cache_ratio)}</td>
           <td><div class="flags">${flags.slice(0, 2).map(flag => `<span class="flag">${escapeHtml(flag)}</span>`).join('')}</div></td>
         `;
@@ -906,7 +1041,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           <td><span class="pill model-pill" data-full-label="${escapeHtml(short(group.modelSummary))}">${escapeHtml(short(group.modelSummary))}</span></td>
           <td>${escapeHtml(truncate(group.effortSummary, 28))}</td>
           <td class="num">${number.format(group.totalTokens)}</td>
-          <td class="num">${pricingConfigured ? money(group.estimatedCost) : 'Not configured'}</td>
+          <td class="num">${costUsageCell(pricingConfigured ? money(group.estimatedCost) : 'Not configured', group.usageCredits)}</td>
           <td class="num">${pct(group.cacheRatio)}</td>
           <td class="num">${number.format(group.signalCount)}</td>
         `;
@@ -951,7 +1086,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
             <td>${escapeHtml(short(row.effort))}</td>
             <td>${escapeHtml(sourceLabel(row))}</td>
             <td class="num">${number.format(row.total_tokens || 0)}</td>
-            <td class="num">${escapeHtml(row.pricing_estimated ? `${money(row.estimated_cost_usd)}*` : money(row.estimated_cost_usd))}</td>
+            <td class="num">${costUsageCell(row.pricing_estimated ? `${money(row.estimated_cost_usd)}*` : money(row.estimated_cost_usd), usageCreditValue(row))}</td>
             <td class="num">${pct(row.cache_ratio)}</td>
             <td><div class="flags">${flags.slice(0, 2).map(flag => `<span class="flag">${escapeHtml(flag)}</span>`).join('')}</div></td>
           </tr>
@@ -1077,7 +1212,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
             <div class="timeline-time">${escapeHtml(formatTimestamp(row.event_timestamp, 'Unknown'))}</div>
             <div>
               <div class="timeline-title">${escapeHtml(sourceLabel(row))} · ${escapeHtml(short(row.model))}</div>
-              <div class="timeline-meta">${escapeHtml(number.format(row.total_tokens || 0))} tokens · ${escapeHtml(money(row.estimated_cost_usd))} · cache ${escapeHtml(pct(row.cache_ratio))}</div>
+              <div class="timeline-meta">${escapeHtml(number.format(row.total_tokens || 0))} tokens · ${escapeHtml(money(row.estimated_cost_usd))} · ${escapeHtml(usageCreditValue(row) === null ? 'no credit rate' : `${credits(usageCreditValue(row))} credits`)} · cache ${escapeHtml(pct(row.cache_ratio))}</div>
               <div class="signal-strip">
                 <span class="flag">context ${escapeHtml(pct(contextUse))}</span>
                 <span class="flag">${escapeHtml(pricingStatusText(row))}</span>
@@ -1094,9 +1229,11 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       detailEl.innerHTML = `
         <div class="detail-stack">
           <div class="detail-card primary">
-            <h3>Cost, cache, and context</h3>
+            <h3>Cost, usage, and context</h3>
             ${fieldsList([
               ['Estimated cost', money(row.estimated_cost_usd)],
+              ['Codex credits', usageCreditsWithStatus(row)],
+              ['Allowance impact', rowAllowanceImpact(row)],
               ['Cache ratio', pct(row.cache_ratio)],
               ['Uncached input', number.format(row.uncached_input_tokens || 0)],
               ['Context use', pct(row.context_window_percent)],
@@ -1124,6 +1261,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
               ['Reasoning output', number.format(row.reasoning_output_tokens || 0)],
               ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],
               ['Pricing model', row.pricing_model || 'No configured price'],
+              ['Credit model', row.usage_credit_model || 'No mapped rate'],
               ['Cache savings', money(row.estimated_cache_savings_usd)],
               ['Efficiency signals', flags],
             ])}
@@ -1131,11 +1269,12 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           ${detailCollapse('Raw aggregate identifiers', [
             ['Session', row.session_id],
             ['Turn', row.turn_id],
-            ['Thread source', row.thread_source || 'user'],
-            ['Subagent type', row.subagent_type || 'None'],
-            ['Agent role', row.agent_role || 'None'],
-            ['Agent nickname', row.agent_nickname || 'None'],
-            ['Parent session', row.parent_session_id || 'None'],
+              ['Thread source', row.thread_source || 'user'],
+              ['Subagent type', row.subagent_type || 'None'],
+              ['Agent role', row.agent_role || 'None'],
+              ['Agent nickname', row.agent_nickname || 'None'],
+              ['Credit note', row.usage_credit_note || 'None'],
+              ['Parent session', row.parent_session_id || 'None'],
             ['Parent updated', resolvedParentSessionUpdatedAt(row) ? formatTimestamp(resolvedParentSessionUpdatedAt(row)) : 'None'],
             ['Cwd', row.cwd],
           ])}
@@ -1155,6 +1294,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
             <h3>Thread attention summary</h3>
             ${fieldsList([
               ['Estimated cost', pricingConfigured ? money(group.estimatedCost) : 'Not configured'],
+              ['Codex credits', `${credits(group.usageCredits)} credits · ${group.creditStatus}`],
+              ['Allowance impact', allowanceWindowText(group.usageCredits, 'impact') || allowanceWindowText(group.usageCredits, 'remaining') || `${credits(group.usageCredits)} credits counted toward Codex usage limits`],
               ['Attention score', number.format(Math.round(group.attentionScore))],
               ['Cache ratio', pct(group.cacheRatio)],
               ['Max context use', pct(group.maxContextUse)],
@@ -1204,11 +1345,16 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       data = payloadRows(nextPayload);
       pricingConfigured = Boolean(nextPayload.pricing_configured);
       pricingSource = nextPayload.pricing_source || {};
+      allowanceConfigured = Boolean(nextPayload.allowance_configured);
+      allowanceSource = nextPayload.allowance_source || {};
+      allowanceWindows = Array.isArray(nextPayload.allowance_windows) ? nextPayload.allowance_windows : [];
+      allowanceError = nextPayload.allowance_error || '';
       totalAvailableRows = Number(nextPayload.total_available_rows || data.length);
       loadedLimit = payloadLimit(nextPayload);
       rebuildDashboardIndexes();
       rebuildFilterOptions();
       updatePricingSourceLine();
+      updateAllowanceSourceLine();
       updateLoadLimitControl();
       render();
     }
@@ -1321,6 +1467,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     rebuildDashboardIndexes();
     rebuildFilterOptions();
     updatePricingSourceLine();
+    updateAllowanceSourceLine();
     updateLoadLimitControl();
     if (!liveRefreshSupported) {
       autoRefreshEl.checked = false;
