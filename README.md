@@ -10,13 +10,13 @@ Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggre
 
 The dashboard opens with an insight-first summary that ranks threads and calls needing attention before you start sorting tables.
 
-![Insights view with ranked Needs Attention cards, investigation presets, and top threads by attention score.](docs/assets/dashboard-insights.png)
+![Insights view with ranked Needs Attention cards, investigation presets, and top threads by attention score.](docs/assets/dashboard-insights.png?v=47d58ee)
 
-![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png)
+![Calls view with filters, totals, model-call rows, and the details panel.](docs/assets/dashboard-calls.png?v=47d58ee)
 
-![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png)
+![Threads view with grouped Codex threads and expanded chronological calls.](docs/assets/dashboard-threads.png?v=47d58ee)
 
-![Call Details panel showing aggregate token, pricing, Codex credit, allowance, context, and thread attachment fields.](docs/assets/dashboard-details.png)
+![Call Details panel showing aggregate token, pricing, Codex credit, allowance, context, and thread attachment fields.](docs/assets/dashboard-details.png?v=47d58ee)
 
 These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content.
 
