@@ -427,6 +427,11 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         const haystack = [
           rowThreadLabel(row),
           row.cwd,
+          row.project_name,
+          row.project_relative_cwd,
+          Array.isArray(row.project_tags) ? row.project_tags.join(' ') : '',
+          row.git_branch,
+          row.git_remote_label,
           row.model,
           row.effort,
           row.session_id,
@@ -1341,6 +1346,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
             <h3>Thread narrative</h3>
             ${fieldsList([
               ['Thread', attachment.label],
+              ['Project', row.project_name || 'Unknown project'],
+              ['Project tags', Array.isArray(row.project_tags) && row.project_tags.length ? row.project_tags.join(', ') : 'None'],
               ['Thread attachment', attachment.relation],
               ['Source', sourceLabel(row)],
               ['Parent thread', resolvedParentThreadName(row) || 'None'],
@@ -1373,6 +1380,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
               ['Parent session', row.parent_session_id || 'None'],
             ['Parent updated', resolvedParentSessionUpdatedAt(row) ? formatTimestamp(resolvedParentSessionUpdatedAt(row)) : 'None'],
             ['Cwd', row.cwd],
+            ['Project cwd', row.project_relative_cwd || '.'],
+            ['Git branch', row.git_branch || 'Unknown'],
+            ['Remote label', row.git_remote_label || 'None'],
+            ['Remote hash', row.git_remote_hash || 'None'],
           ])}
           ${detailCollapse('Source file and line', [
             ['Source line', `${row.source_file}:${row.line_number}`],

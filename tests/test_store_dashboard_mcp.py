@@ -244,6 +244,9 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Why flagged" in dashboard_js
     assert "Thread lifecycle" in dashboard_js
     assert "Largest cumulative jump" in dashboard_js
+    assert "project_name" in dashboard
+    assert "Project tags" in dashboard_js
+    assert "Git branch" in dashboard_js
     assert "usage_credit_confidence" in dashboard
     assert "Credit rates:" in dashboard_js
     assert "Codex allowance usage" in dashboard_js
@@ -338,6 +341,7 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
         pricing_path=pricing_path,
         allowance_path=tmp_path / "allowance.json",
         thresholds_path=tmp_path / "thresholds.json",
+        projects_path=tmp_path / "projects.json",
         limit=5000,
         since=None,
         codex_home=codex_home,
@@ -427,6 +431,7 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
         pricing_path=tmp_path / "pricing.json",
         allowance_path=tmp_path / "allowance.json",
         thresholds_path=tmp_path / "thresholds.json",
+        projects_path=tmp_path / "projects.json",
         limit=5000,
         since=None,
         codex_home=tmp_path / ".codex",
@@ -469,6 +474,7 @@ def test_dashboard_server_can_disable_context_api(tmp_path: Path) -> None:
         pricing_path=tmp_path / "pricing.json",
         allowance_path=tmp_path / "allowance.json",
         thresholds_path=tmp_path / "thresholds.json",
+        projects_path=tmp_path / "projects.json",
         limit=5000,
         since=None,
         codex_home=tmp_path / ".codex",
@@ -551,6 +557,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
 
     refresh = mcp_server.refresh_usage_index()
     summary = mcp_server.usage_summary(group_by="thread")
+    project_summary = mcp_server.usage_summary(group_by="project")
     model_summary = mcp_server.usage_summary(preset="by-model")
     expensive = mcp_server.most_expensive_usage_calls(limit=1)
     pricing_coverage = mcp_server.usage_pricing_coverage()
@@ -567,6 +574,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert refresh["parsed_events"] == 4
     assert refresh["skipped_events"] == 0
     assert "Add Codex token tracking" in summary
+    assert "codex-usage-tracker" in project_summary
     assert "estimated cost" in model_summary
     assert "Most expensive Codex calls" in expensive
     assert "Codex pricing coverage" in pricing_coverage

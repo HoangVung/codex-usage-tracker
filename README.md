@@ -30,7 +30,7 @@ Use this when you want to answer questions like:
 - Do long-running chats get more expensive over time?
 - Are subagents, auto-reviews, or review passes attached to the right parent work?
 - Which calls have low cache reuse, high context-window pressure, or large reasoning output?
-- Which active project directories are consuming the most usage?
+- Which projects, project tags, or active directories are consuming the most usage?
 - Did a change in workflow, model choice, or reasoning mode improve efficiency?
 
 The dashboard is intentionally split into three views:
@@ -241,6 +241,8 @@ Show a summary:
 
 ```bash
 codex-usage-tracker summary --group-by model
+codex-usage-tracker summary --group-by project
+codex-usage-tracker summary --group-by project_tag
 codex-usage-tracker summary --group-by thread --limit 20
 codex-usage-tracker summary --preset today
 codex-usage-tracker summary --preset last-7-days
@@ -302,6 +304,14 @@ codex-usage-tracker init-thresholds
 ```
 
 Edit `~/.codex-usage-tracker/thresholds.json` to adjust the aggregate-only thresholds used for low cache reuse, high context pressure, high uncached input, large cumulative threads, reasoning-output spikes, large low-output calls, and high estimated cost. The dashboard uses these values for presets, insight cards, row recommendations, and thread lifecycle summaries.
+
+Enable optional project aliases, ignored paths, and tags:
+
+```bash
+codex-usage-tracker init-projects
+```
+
+Edit `~/.codex-usage-tracker/projects.json` to map stable project hashes, repo roots, or project names to friendlier aliases, ignored paths, and tags. The tracker derives project identity from `cwd` and local Git metadata when available: repo root, repo name, current branch, and a hashed remote origin. It does not store or display the full remote URL.
 
 Credit usage estimates are calculated from Codex's aggregate input, cached-input, and output token counters using the bundled OpenAI Codex rate-card snapshot from `https://help.openai.com/en/articles/20001106-codex-rate-card` and `https://developers.openai.com/codex/pricing`. Direct model matches are marked exact. Local aliases and inferred labels, such as code-review usage mapped to GPT-5.3-Codex, are marked estimated. Normal reports do not contact the network for allowance or credit estimates.
 

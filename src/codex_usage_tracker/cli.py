@@ -25,11 +25,13 @@ from codex_usage_tracker.paths import (
     DEFAULT_MARKETPLACE_PATH,
     DEFAULT_PLUGIN_LINK,
     DEFAULT_PRICING_PATH,
+    DEFAULT_PROJECTS_PATH,
     DEFAULT_SUPPORT_BUNDLE_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.parser import inspect_log, load_session_index
 from codex_usage_tracker.plugin_installer import install_plugin, uninstall_plugin
+from codex_usage_tracker.projects import write_project_template
 from codex_usage_tracker.pricing import (
     OPENAI_PRICING_MD_URL,
     VALID_PRICING_TIERS,
@@ -83,6 +85,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     parser.add_argument("--allowance", type=Path, default=DEFAULT_ALLOWANCE_PATH)
     parser.add_argument("--thresholds", type=Path, default=DEFAULT_THRESHOLDS_PATH)
+    parser.add_argument("--projects", type=Path, default=DEFAULT_PROJECTS_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_setup_parser(subparsers)
     _add_doctor_parser(subparsers)
@@ -103,6 +106,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_pricing_parsers(subparsers)
     _add_allowance_parser(subparsers)
     _add_threshold_parser(subparsers)
+    _add_project_parser(subparsers)
     _add_support_bundle_parser(subparsers)
     return parser
 
@@ -403,6 +407,17 @@ def _add_threshold_parser(
     thresholds.add_argument("--force", action="store_true")
 
 
+def _add_project_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    projects = subparsers.add_parser(
+        "init-projects",
+        help="Write a local template for project aliases, ignored paths, and tags",
+    )
+    projects.add_argument("--output", type=Path, default=None)
+    projects.add_argument("--force", action="store_true")
+
+
 def _add_support_bundle_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -609,6 +624,7 @@ def _run_summary(args: argparse.Namespace) -> int:
         preset=args.preset,
         since=args.since,
         limit=args.limit,
+        projects_path=args.projects,
     )
     print(report.render())
     return 0
@@ -640,6 +656,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
         allowance_path=args.allowance,
         since=args.since,
         thresholds_path=args.thresholds,
+        projects_path=args.projects,
     )
     print(f"Wrote dashboard to {output}")
     if args.open:
@@ -658,6 +675,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
         allowance_path=args.allowance,
         since=args.since,
         thresholds_path=args.thresholds,
+        projects_path=args.projects,
     )
     print(f"Opening dashboard at {output}")
     webbrowser.open(output.resolve().as_uri())
@@ -686,6 +704,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
         include_archived=args.include_archived,
         context_api="disabled" if args.no_context_api else args.context_api,
         thresholds_path=args.thresholds,
+        projects_path=args.projects,
     )
     return 0
 
@@ -758,6 +777,12 @@ def _run_init_thresholds(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_init_projects(args: argparse.Namespace) -> int:
+    output = write_project_template(args.output or args.projects, force=args.force)
+    print(f"Wrote project attribution template to {output}")
+    return 0
+
+
 def _run_support_bundle(args: argparse.Namespace) -> int:
     output = build_support_bundle(
         output_path=args.output,
@@ -766,6 +791,7 @@ def _run_support_bundle(args: argparse.Namespace) -> int:
         pricing_path=args.pricing,
         allowance_path=args.allowance,
         thresholds_path=args.thresholds,
+        projects_path=args.projects,
     )
     print(f"Wrote privacy-preserving support bundle to {output}")
     print("Bundle excludes raw logs, prompts, assistant messages, tool output, and context text.")
@@ -795,6 +821,7 @@ _COMMAND_HANDLERS = {
     "update-pricing": _run_update_pricing,
     "init-allowance": _run_init_allowance,
     "init-thresholds": _run_init_thresholds,
+    "init-projects": _run_init_projects,
     "support-bundle": _run_support_bundle,
 }
 

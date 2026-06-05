@@ -59,6 +59,7 @@ codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help
 codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
 codex-usage-tracker init-thresholds --output /tmp/codex-usage-thresholds.json
+codex-usage-tracker init-projects --output /tmp/codex-usage-projects.json
 codex-usage-tracker support-bundle --output /tmp/codex-usage-support.json
 codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role

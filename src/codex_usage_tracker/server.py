@@ -23,6 +23,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_CODEX_HOME,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_PRICING_PATH,
+    DEFAULT_PROJECTS_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.store import refresh_usage_index
@@ -43,6 +44,7 @@ def serve_dashboard(
     include_archived: bool = False,
     context_api: str = "explicit",
     thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
+    projects_path: Path = DEFAULT_PROJECTS_PATH,
 ) -> None:
     """Generate and serve the dashboard plus a localhost-only context endpoint."""
 
@@ -60,6 +62,7 @@ def serve_dashboard(
         api_token=api_token,
         context_api_enabled=context_api_enabled,
         thresholds_path=thresholds_path,
+        projects_path=projects_path,
     )
     handler = partial(
         _UsageDashboardHandler,
@@ -68,6 +71,7 @@ def serve_dashboard(
         pricing_path=pricing_path,
         allowance_path=allowance_path,
         thresholds_path=thresholds_path,
+        projects_path=projects_path,
         limit=limit,
         since=since,
         codex_home=codex_home,
@@ -102,6 +106,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         pricing_path: Path,
         allowance_path: Path,
         thresholds_path: Path,
+        projects_path: Path,
         limit: int,
         since: str | None,
         codex_home: Path,
@@ -117,6 +122,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         self._pricing_path = pricing_path
         self._allowance_path = allowance_path
         self._thresholds_path = thresholds_path
+        self._projects_path = projects_path
         self._limit = limit
         self._since = since
         self._codex_home = codex_home
@@ -237,6 +243,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
                 pricing_path=self._pricing_path,
                 allowance_path=self._allowance_path,
                 thresholds_path=self._thresholds_path,
+                projects_path=self._projects_path,
                 since=self._since,
                 api_token=self._api_token,
                 context_api_enabled=self._context_api_enabled,

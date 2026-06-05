@@ -18,8 +18,17 @@ from codex_usage_tracker.pricing import (
     load_pricing_config,
     summarize_pricing_coverage,
 )
+from codex_usage_tracker.paths import DEFAULT_PROJECTS_PATH
+from codex_usage_tracker.projects import (
+    annotate_rows_with_project_identity,
+    load_project_config,
+)
 from codex_usage_tracker.recommendations import annotate_rows_with_recommendations
-from codex_usage_tracker.store import query_most_expensive_calls, query_summary
+from codex_usage_tracker.store import (
+    query_dashboard_events,
+    query_most_expensive_calls,
+    query_summary,
+)
 
 
 SUMMARY_GROUP_BY_CHOICES = (
@@ -27,6 +36,8 @@ SUMMARY_GROUP_BY_CHOICES = (
     "model",
     "effort",
     "cwd",
+    "project",
+    "project_tag",
     "thread",
     "session",
     "thread_source",
@@ -40,6 +51,8 @@ SUMMARY_PRESET_CHOICES = (
     "last-7-days",
     "by-model",
     "by-cwd",
+    "by-project",
+    "by-project-tag",
     "by-thread",
     "by-subagent-role",
     "by-subagent-type",
@@ -50,6 +63,8 @@ EXPENSIVE_PRESET_CHOICES = ("today", "last-7-days")
 _SUMMARY_PRESET_GROUPS = {
     "by-model": "model",
     "by-cwd": "cwd",
+    "by-project": "project",
+    "by-project-tag": "project_tag",
     "by-thread": "thread",
     "by-subagent-role": "agent_role",
     "by-subagent-type": "subagent_type",
@@ -108,6 +123,7 @@ def build_summary_report(
     limit: int = 20,
     preset: str | None = None,
     since: str | None = None,
+    projects_path: Path = DEFAULT_PROJECTS_PATH,
 ) -> SummaryReport:
     """Build a usage summary or expensive-call preset from aggregate rows."""
 
@@ -120,6 +136,17 @@ def build_summary_report(
             group_by=resolved_group_by,
             is_expensive=True,
         )
+
+    if resolved_group_by in {"project", "project_tag"}:
+        rows = _project_summary_rows(
+            db_path=db_path,
+            pricing=pricing,
+            group_by=resolved_group_by,
+            limit=limit,
+            since=since_filter,
+            projects_path=projects_path,
+        )
+        return SummaryReport(rows=rows, group_by=resolved_group_by)
 
     rows = query_summary(
         db_path,
@@ -168,3 +195,75 @@ def build_pricing_coverage_report(
     config = pricing or load_pricing_config(pricing_path)
     rows = query_summary(db_path, group_by="model", limit=limit, since=since)
     return PricingCoverageReport(summarize_pricing_coverage(rows, pricing=config))
+
+
+def _project_summary_rows(
+    *,
+    db_path: Path,
+    pricing: PricingConfig,
+    group_by: str,
+    limit: int,
+    since: str | None,
+    projects_path: Path = DEFAULT_PROJECTS_PATH,
+) -> list[dict[str, Any]]:
+    rows = annotate_rows_with_project_identity(
+        annotate_rows_with_efficiency(query_dashboard_events(db_path, limit=0, since=since), pricing),
+        load_project_config(projects_path),
+    )
+    buckets: dict[str, dict[str, Any]] = {}
+    for row in rows:
+        if group_by == "project_tag":
+            keys = row.get("project_tags") or ["untagged"]
+        else:
+            keys = [row.get("project_name") or "Unknown project"]
+        for key in keys:
+            bucket = buckets.setdefault(
+                str(key),
+                {
+                    "group_key": str(key),
+                    "model_calls": 0,
+                    "sessions": set(),
+                    "turns": set(),
+                    "input_tokens": 0,
+                    "cached_input_tokens": 0,
+                    "uncached_input_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_output_tokens": 0,
+                    "total_tokens": 0,
+                    "estimated_cost_usd": 0.0,
+                    "_cache_ratio_sum": 0.0,
+                    "_reasoning_ratio_sum": 0.0,
+                    "_context_sum": 0.0,
+                    "latest_event": "",
+                },
+            )
+            bucket["model_calls"] += 1
+            bucket["sessions"].add(row.get("session_id"))
+            if row.get("turn_id"):
+                bucket["turns"].add(row.get("turn_id"))
+            for token_key in (
+                "input_tokens",
+                "cached_input_tokens",
+                "uncached_input_tokens",
+                "output_tokens",
+                "reasoning_output_tokens",
+                "total_tokens",
+            ):
+                bucket[token_key] += int(row.get(token_key) or 0)
+            bucket["estimated_cost_usd"] += float(row.get("estimated_cost_usd") or 0)
+            bucket["_cache_ratio_sum"] += float(row.get("cache_ratio") or 0)
+            bucket["_reasoning_ratio_sum"] += float(row.get("reasoning_output_ratio") or 0)
+            bucket["_context_sum"] += float(row.get("context_window_percent") or 0)
+            if str(row.get("event_timestamp") or "") > bucket["latest_event"]:
+                bucket["latest_event"] = str(row.get("event_timestamp") or "")
+    summaries: list[dict[str, Any]] = []
+    for bucket in buckets.values():
+        calls = max(int(bucket["model_calls"]), 1)
+        bucket["sessions"] = len(bucket["sessions"])
+        bucket["turns"] = len(bucket["turns"])
+        bucket["avg_cache_ratio"] = bucket.pop("_cache_ratio_sum") / calls
+        bucket["avg_reasoning_output_ratio"] = bucket.pop("_reasoning_ratio_sum") / calls
+        bucket["avg_context_window_percent"] = bucket.pop("_context_sum") / calls
+        summaries.append(bucket)
+    summaries.sort(key=lambda row: (-int(row["total_tokens"]), str(row["group_key"])))
+    return summaries[:limit]

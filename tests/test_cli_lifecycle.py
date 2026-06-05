@@ -62,6 +62,7 @@ def test_setup_support_bundle_and_reset_db_cli(tmp_path: Path) -> None:
     assert bundle["privacy"]["contains_raw_logs"] is False
     assert bundle["refresh"]["parsed_events"] == "1"
     assert "low_cache_ratio" in bundle["thresholds"]["keys"]
+    assert bundle["projects"]["alias_count"] == 0
     assert "SECRET RAW PROMPT" not in json.dumps(bundle)
 
     reset_without_confirm = _run_cli(
