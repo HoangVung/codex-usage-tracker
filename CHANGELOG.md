@@ -4,6 +4,9 @@
 
 - Add tested JSON contract validation for stable CLI and MCP payload schemas.
 - Add schema markers to doctor, pricing coverage, MCP dashboard/export/config, and opt-in context payloads.
+- Add ranked CLI/MCP recommendations with severity score, primary recommendation, secondary signals, and thread rollups.
+- Add offset-aware localhost dashboard usage API responses for paged aggregate-row automation.
+- Add a synthetic large-history benchmark script for 10k, 100k, and 500k aggregate-row SQLite fixtures.
 - Add Ruff, coverage, and dashboard JavaScript syntax checks to CI.
 - Split dashboard JavaScript helpers into formatting, data, state, and rendering/runtime assets.
 - Add issue templates for bugs, parser compatibility, pricing/allowance issues, and feature requests.

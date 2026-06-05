@@ -214,6 +214,8 @@ codex-usage-tracker serve-dashboard --no-context-api --open
 
 When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle that polls the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Refresh calls and `/api/context` require a random per-server token embedded in that generated dashboard, and the server rejects non-loopback `Host` or cross-origin `Origin` headers. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action when the context API is enabled. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
 
+The localhost `/api/usage` endpoint accepts `limit` and `offset` query parameters, so automation can page aggregate rows without asking the server to load an entire large history at once.
+
 `serve-dashboard --context-api explicit` is the default and keeps context loading as an explicit per-row action. `serve-dashboard --no-context-api` or `--context-api disabled` serves live aggregate refresh while disabling `/api/context` entirely.
 
 Dashboard behavior:
@@ -245,6 +247,7 @@ Useful investigations:
 - Filter by model or reasoning effort to compare usage patterns across model choices.
 - Use `summary --preset by-subagent-role` to see whether delegated work is driving a large share of usage.
 - Use `expensive --limit 10` for a quick CLI list of the highest-cost calls.
+- Use `recommendations --json` for ranked action rows and thread rollups with severity score, primary recommendation, and secondary signals.
 - Use `query` when you need stable JSON for automation across project, model, effort, thread, pricing, token, or credit filters.
 
 Show a summary:
@@ -259,6 +262,7 @@ codex-usage-tracker summary --preset last-7-days
 codex-usage-tracker summary --preset expensive
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 10
+codex-usage-tracker recommendations --limit 10
 codex-usage-tracker pricing-coverage
 ```
 
@@ -267,6 +271,7 @@ Query aggregate rows as JSON:
 ```bash
 codex-usage-tracker query --since 2026-06-01 --project codex-usage-tracker --min-credits 1
 codex-usage-tracker query --pricing-status unpriced --limit 0
+codex-usage-tracker recommendations --since 2026-06-01 --json
 codex-usage-tracker summary --group-by model --json
 codex-usage-tracker session <session-id> --json
 ```
@@ -376,6 +381,16 @@ To configure the usage component:
 4. Add `remaining_credits` and `total_credits` only if your plan or workspace exposes exact credit numbers.
 5. Leave fields as `null` when you do not have a trustworthy value; the dashboard will still show credits used, but it will not pretend to know remaining allowance.
 
+## Large-History Benchmarking
+
+Use the synthetic benchmark script when changing SQLite filters, dashboard payload loading, or indexes:
+
+```bash
+python scripts/benchmark_synthetic_history.py --rows 10000 100000 500000
+```
+
+The script creates synthetic aggregate-only SQLite databases and times common filtered dashboard query paths. It does not read real Codex logs or contain prompts, assistant text, tool output, or private session content.
+
 ## Current Limitations
 
 - This is a sidecar dashboard and plugin, not a native Codex chat overlay. Native hover tooltips inside Codex chat would require a transcript UI extension point that is not part of this v1 surface.
@@ -441,7 +456,7 @@ Show me what is estimated or unpriced before I trust the cost numbers.
 
 The API skill should use aggregate JSON first: refresh the local index, call
 `usage_summary`, `usage_query`, `session_usage`,
-`most_expensive_usage_calls`, or `usage_pricing_coverage`, then explain the
+`usage_recommendations`, `most_expensive_usage_calls`, or `usage_pricing_coverage`, then explain the
 answer with the data scope and any estimate caveats. If MCP tools are not
 available, the same questions can be answered through the CLI JSON commands
 documented in [`docs/cli-json-schemas.md`](docs/cli-json-schemas.md).
@@ -458,6 +473,7 @@ normal analysis and should only be loaded when you explicitly ask for it.
 - `usage_doctor`
 - `usage_summary`
 - `usage_query`
+- `usage_recommendations`
 - `session_usage`
 - `usage_call_context`
 - `most_expensive_usage_calls`
@@ -468,7 +484,7 @@ normal analysis and should only be loaded when you explicitly ask for it.
 - `update_usage_pricing_config`
 - `init_usage_allowance_config`
 
-`usage_doctor`, `usage_summary`, `session_usage`, `most_expensive_usage_calls`, and `usage_pricing_coverage` accept `response_format="json"` when an agent needs stable structured output instead of markdown. `refresh_usage_index`, `usage_query`, `generate_usage_dashboard`, `export_usage_csv`, and config-writing MCP tools return JSON dictionaries directly.
+`usage_doctor`, `usage_summary`, `usage_recommendations`, `session_usage`, `most_expensive_usage_calls`, and `usage_pricing_coverage` accept `response_format="json"` when an agent needs stable structured output instead of markdown. `refresh_usage_index`, `usage_query`, `generate_usage_dashboard`, `export_usage_csv`, and config-writing MCP tools return JSON dictionaries directly.
 
 ## Data Privacy
 

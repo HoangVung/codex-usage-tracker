@@ -103,6 +103,29 @@ JSON_PAYLOAD_CONTRACTS: dict[str, dict[str, Any]] = {
             }
         },
     },
+    "codex-usage-tracker-recommendations-v1": {
+        "required": {
+            "filters": dict,
+            "row_count": int,
+            "total_matched_rows": int,
+            "truncated": bool,
+            "threads": list,
+            "rows": list,
+        },
+        "nested": {
+            "filters": {
+                "since": (str, NoneType),
+                "until": (str, NoneType),
+                "model": (str, NoneType),
+                "effort": (str, NoneType),
+                "thread": (str, NoneType),
+                "project": (str, NoneType),
+                "min_score": (int, float, NoneType),
+                "limit": (int, NoneType),
+                "privacy_mode": str,
+            }
+        },
+    },
     "codex-usage-tracker-session-v1": {
         "required": {
             "requested_session_id": (str, NoneType),

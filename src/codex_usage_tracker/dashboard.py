@@ -48,6 +48,7 @@ from codex_usage_tracker.threads import annotate_thread_attachments
 def dashboard_payload(
     db_path: Path,
     limit: int | None = 5000,
+    offset: int = 0,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
@@ -61,8 +62,14 @@ def dashboard_payload(
     """Return aggregate-only dashboard data without rendering HTML."""
 
     privacy_mode = validate_privacy_mode(privacy_mode)
+    normalized_offset = _normalize_offset(offset)
     rows = annotate_thread_attachments(
-        query_dashboard_events(db_path=db_path, limit=limit, since=since)
+        query_dashboard_events(
+            db_path=db_path,
+            limit=limit,
+            offset=normalized_offset,
+            since=since,
+        )
     )
     pricing = load_pricing_config(pricing_path)
     allowance = load_allowance_config(allowance_path, rate_card_path=rate_card_path)
@@ -77,6 +84,7 @@ def dashboard_payload(
     annotated_rows = apply_project_privacy_to_rows(annotated_rows, privacy_mode=privacy_mode)
     allowance_summary = summarize_allowance_usage(annotated_rows, allowance)
     normalized_limit = _normalize_limit(limit)
+    total_available_rows = query_dashboard_event_count(db_path=db_path, since=since)
     metadata = refresh_metadata(db_path)
     parser_diagnostics = {
         key.removeprefix("parser_"): _safe_int(value)
@@ -95,8 +103,19 @@ def dashboard_payload(
         "rate_card_configured": allowance_summary["rate_card_loaded"],
         "rate_card_error": allowance_summary["rate_card_error"],
         "loaded_row_count": len(rows),
-        "total_available_rows": query_dashboard_event_count(db_path=db_path, since=since),
+        "total_available_rows": total_available_rows,
         "limit": normalized_limit,
+        "offset": normalized_offset,
+        "has_more": (
+            normalized_limit is not None
+            and normalized_offset + len(rows) < total_available_rows
+        ),
+        "next_offset": (
+            normalized_offset + len(rows)
+            if normalized_limit is not None
+            and normalized_offset + len(rows) < total_available_rows
+            else None
+        ),
         "limit_label": "All" if normalized_limit is None else str(normalized_limit),
         "parser_diagnostics": parser_diagnostics,
         "parser_adapter": metadata.get("parser_adapter"),
@@ -171,6 +190,12 @@ def _normalize_limit(limit: int | None) -> int | None:
     if limit is None or limit <= 0:
         return None
     return int(limit)
+
+
+def _normalize_offset(offset: int | None) -> int:
+    if offset is None or offset <= 0:
+        return 0
+    return int(offset)
 
 
 def _pricing_snapshot(

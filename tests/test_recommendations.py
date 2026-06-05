@@ -39,6 +39,17 @@ def test_recommendations_explain_aggregate_usage_flags() -> None:
         "large-thread",
         "subagent-attribution",
     ]
+    assert all("score" in recommendation for recommendation in recommendations)
+    assert annotated["primary_signal"] == "pricing-gap"
+    assert annotated["primary_recommendation"]["key"] == "pricing-gap"
+    assert annotated["secondary_signals"] == [
+        "context-bloat",
+        "low-cache",
+        "low-output",
+        "large-thread",
+        "subagent-attribution",
+    ]
+    assert annotated["recommendation_score"] > 0
     assert annotated["recommended_action"] == recommendations[0]["action"]
     assert len(annotated["flag_explanations"]) == len(recommendations)
 

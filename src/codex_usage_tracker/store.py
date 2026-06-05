@@ -418,6 +418,7 @@ def query_usage_record(
 def query_dashboard_events(
     db_path: Path = DEFAULT_DB_PATH,
     limit: int | None = 5000,
+    offset: int = 0,
     since: str | None = None,
     until: str | None = None,
     model: str | None = None,
@@ -435,8 +436,18 @@ def query_dashboard_events(
         table_alias="usage_events",
     )
     normalized_limit = _normalize_limit(limit)
-    limit_clause = "LIMIT ?" if normalized_limit is not None else ""
-    query_params = [*params, normalized_limit] if normalized_limit is not None else params
+    normalized_offset = _normalize_offset(offset)
+    limit_clause = ""
+    query_params = list(params)
+    if normalized_limit is not None:
+        limit_clause = "LIMIT ?"
+        query_params.append(normalized_limit)
+        if normalized_offset:
+            limit_clause += " OFFSET ?"
+            query_params.append(normalized_offset)
+    elif normalized_offset:
+        limit_clause = "LIMIT -1 OFFSET ?"
+        query_params.append(normalized_offset)
     with connect(db_path) as conn:
         init_db(conn)
         rows = conn.execute(
@@ -472,11 +483,24 @@ def query_dashboard_events(
 
 
 def query_dashboard_event_count(
-    db_path: Path = DEFAULT_DB_PATH, since: str | None = None
+    db_path: Path = DEFAULT_DB_PATH,
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    min_tokens: int | None = None,
 ) -> int:
     """Return total aggregate usage rows available for the dashboard window."""
 
-    where_clause, params = _since_where_clause(since)
+    where_clause, params = _usage_where_clause(
+        since=since,
+        until=until,
+        model=model,
+        effort=effort,
+        thread=thread,
+        min_tokens=min_tokens,
+    )
     with connect(db_path) as conn:
         init_db(conn)
         row = conn.execute(
@@ -609,6 +633,12 @@ def _normalize_limit(limit: int | None) -> int | None:
     if limit is None or limit <= 0:
         return None
     return int(limit)
+
+
+def _normalize_offset(offset: int | None) -> int:
+    if offset is None or offset <= 0:
+        return 0
+    return int(offset)
 
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:

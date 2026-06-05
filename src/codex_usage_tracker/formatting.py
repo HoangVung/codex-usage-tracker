@@ -88,6 +88,45 @@ def format_calls(rows: list[dict[str, Any]], title: str = "Most expensive Codex 
     return "\n".join(lines)
 
 
+def format_recommendations(payload: dict[str, Any]) -> str:
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows:
+        return "No aggregate recommendations are currently flagged."
+
+    lines = ["Codex usage recommendations", ""]
+    threads = payload.get("threads")
+    if isinstance(threads, list) and threads:
+        lines.append("Top threads:")
+        for thread in threads[:5]:
+            lines.append(
+                f"- {thread.get('thread') or 'Unknown thread'}: "
+                f"score {_fmt_decimal(thread.get('recommendation_score'))}, "
+                f"{_fmt_int(thread.get('call_count'))} calls, "
+                f"{_fmt_int(thread.get('total_tokens'))} tokens"
+            )
+        lines.append("")
+    lines.append("Top calls:")
+    for index, row in enumerate(rows, 1):
+        primary = row.get("primary_recommendation") or {}
+        if not isinstance(primary, dict):
+            primary = {}
+        thread = (
+            row.get("thread_attachment_label")
+            or row.get("thread_name")
+            or row.get("parent_thread_name")
+            or row.get("session_id")
+            or "Unknown"
+        )
+        lines.append(
+            f"{index}. {thread} | {row.get('model') or 'unknown'} "
+            f"({row.get('effort') or 'unknown'}) | "
+            f"score {_fmt_decimal(row.get('recommendation_score'))} | "
+            f"{primary.get('title') or row.get('primary_signal') or 'Recommendation'}: "
+            f"{row.get('recommended_action') or primary.get('action') or 'Review aggregate usage.'}"
+        )
+    return "\n".join(lines)
+
+
 def format_doctor(report: dict[str, Any]) -> str:
     lines = [
         f"Codex Usage Tracker doctor: {str(report.get('status', 'unknown')).upper()}",
@@ -162,6 +201,13 @@ def _fmt_money(value: object) -> str:
     if amount < 0.01:
         return f"${amount:.4f}"
     return f"${amount:.2f}"
+
+
+def _fmt_decimal(value: object) -> str:
+    try:
+        return f"{float(value):.1f}"
+    except (TypeError, ValueError):
+        return "0.0"
 
 
 def _cost_suffix(row: dict[str, Any], prefix: str = ", estimated cost ") -> str:

@@ -210,6 +210,19 @@ def test_report_json_and_query_cli(tmp_path: Path) -> None:
         "--min-tokens",
         "50",
     )
+    recommendations = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "--pricing",
+        str(tmp_path / "missing-pricing.json"),
+        "--allowance",
+        str(allowance_path),
+        "recommendations",
+        "--limit",
+        "1",
+        "--json",
+    )
     session = _run_cli(
         tmp_path,
         "--db",
@@ -246,11 +259,13 @@ def test_report_json_and_query_cli(tmp_path: Path) -> None:
     refresh_payload = json.loads(refresh.stdout)
     summary_payload = json.loads(summary.stdout)
     query_payload = json.loads(query.stdout)
+    recommendations_payload = json.loads(recommendations.stdout)
     session_payload = json.loads(session.stdout)
     expensive_payload = json.loads(expensive.stdout)
     _assert_contract(refresh_payload)
     _assert_contract(summary_payload)
     _assert_contract(query_payload)
+    _assert_contract(recommendations_payload)
     _assert_contract(session_payload)
     _assert_contract(expensive_payload)
     assert refresh_payload["schema"] == "codex-usage-tracker-refresh-v1"
@@ -266,6 +281,11 @@ def test_report_json_and_query_cli(tmp_path: Path) -> None:
     assert query_payload["rows"][0]["project_relative_cwd"] is None
     assert "/tmp/codex-usage-tracker" not in query.stdout
     assert "SECRET RAW PROMPT" not in query.stdout
+    assert recommendations_payload["schema"] == "codex-usage-tracker-recommendations-v1"
+    assert recommendations_payload["row_count"] == 1
+    assert recommendations_payload["rows"][0]["primary_signal"] == "pricing-gap"
+    assert recommendations_payload["rows"][0]["recommendation_score"] > 0
+    assert recommendations_payload["threads"][0]["primary_recommendation"]["key"] == "pricing-gap"
     assert session_payload["schema"] == "codex-usage-tracker-session-v1"
     assert session_payload["resolved_session_id"] == SESSION_ID
     assert expensive_payload["schema"] == "codex-usage-tracker-summary-v1"

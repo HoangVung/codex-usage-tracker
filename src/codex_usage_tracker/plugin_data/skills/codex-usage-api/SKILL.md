@@ -23,6 +23,7 @@ The only exception is `usage_call_context`, which reads one selected record's lo
    - `usage_summary(..., response_format="json")`
    - `session_usage(..., response_format="json")`
    - `most_expensive_usage_calls(..., response_format="json")`
+   - `usage_recommendations(..., response_format="json")`
    - `usage_pricing_coverage(..., response_format="json")`
    - `usage_query(...)`
 4. Check the top-level `schema` field before interpreting structured output. Known schema ids are documented in `docs/cli-json-schemas.md`.
@@ -32,6 +33,7 @@ The only exception is `usage_call_context`, which reads one selected record's lo
    - `codex-usage-tracker query`
    - `codex-usage-tracker session --json`
    - `codex-usage-tracker expensive --json`
+   - `codex-usage-tracker recommendations --json`
    - `codex-usage-tracker pricing-coverage --json`
 
 ## Routing Questions To API Calls
@@ -39,11 +41,11 @@ The only exception is `usage_call_context`, which reads one selected record's lo
 - "What used the most?" Use `most_expensive_usage_calls(response_format="json")` and `usage_summary(group_by="thread", response_format="json")`.
 - "Which project/thread/model is driving usage?" Use `usage_summary` grouped by `project`, `thread`, or `model`.
 - "Can I share this?" Use redacted or strict privacy mode and avoid `usage_call_context`.
-- "Why did usage spike?" Use `usage_query` with `since`, `project`, `thread`, `model`, `effort`, `min_tokens`, or `min_credits`, then compare timestamps, total tokens, cache ratio, context window percent, and recommendations.
+- "Why did usage spike?" Use `usage_recommendations(response_format="json")` first for ranked causes, then `usage_query` with `since`, `project`, `thread`, `model`, `effort`, `min_tokens`, or `min_credits` for supporting rows.
 - "What is unpriced or estimated?" Use `usage_pricing_coverage(response_format="json")` and `usage_query(pricing_status="unpriced")` or `usage_query(credit_confidence="estimated")`.
 - "How does this affect my allowance?" Use rows from `usage_query` and summarize `usage_credits`, `usage_credit_confidence`, and `allowanceImpact`. Explain that remaining allowance is only as accurate as the user's local allowance config.
 - "What happened in this session?" Use `session_usage(session_id=..., response_format="json")`.
-- "What should I do next?" Rank actions from aggregate signals: high Codex credits, low cache reuse, context growth, estimated/unpriced rates, subagent or auto-review spikes, and high reasoning output.
+- "What should I do next?" Use `usage_recommendations(response_format="json")` and explain the primary recommendation, secondary signals, recommendation score, and top thread rollups.
 
 ## Answer Style
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shlex
 import subprocess
@@ -74,6 +75,33 @@ def test_cli_json_schema_doc_lists_tracked_contracts() -> None:
     missing = [schema for schema in known_json_schemas() if schema not in docs]
 
     assert not missing
+
+
+def test_synthetic_history_benchmark_script_smoke(tmp_path: Path) -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    result = subprocess.run(
+        [
+            sys.executable,
+            "scripts/benchmark_synthetic_history.py",
+            "--rows",
+            "100",
+            "--batch-size",
+            "25",
+            "--db-dir",
+            str(tmp_path),
+            "--json",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        cwd=repo_root,
+        env=_subprocess_env(),
+    )
+    payload = json.loads(result.stdout)
+
+    assert payload["benchmarks"][0]["rows"] == 100
+    assert payload["benchmarks"][0]["filtered_rows"] <= 50
+    assert "idx_usage_model_effort" in payload["benchmarks"][0]["query_plan"]
 
 
 def _subprocess_env() -> dict[str, str]:

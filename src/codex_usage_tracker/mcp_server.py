@@ -35,6 +35,7 @@ from codex_usage_tracker.reports import (
     build_expensive_calls_report,
     build_pricing_coverage_report,
     build_query_report,
+    build_recommendations_report,
     build_summary_report,
 )
 from codex_usage_tracker.store import (
@@ -208,6 +209,41 @@ def usage_query(
         limit=limit,
         privacy_mode=privacy_mode,
     ).payload
+
+
+@mcp.tool()
+def usage_recommendations(
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    project: str | None = None,
+    min_score: float | None = None,
+    limit: int = 20,
+    response_format: str = "markdown",
+    privacy_mode: str = "normal",
+) -> str | dict[str, Any]:
+    """Rank aggregate usage rows and threads by recommendation severity."""
+
+    report = build_recommendations_report(
+        db_path=DEFAULT_DB_PATH,
+        pricing_path=DEFAULT_PRICING_PATH,
+        allowance_path=DEFAULT_ALLOWANCE_PATH,
+        projects_path=DEFAULT_PROJECTS_PATH,
+        since=since,
+        until=until,
+        model=model,
+        effort=effort,
+        thread=thread,
+        project=project,
+        min_score=min_score,
+        limit=limit,
+        privacy_mode=privacy_mode,
+    )
+    if response_format == "json":
+        return report.payload
+    return report.render()
 
 
 @mcp.tool()

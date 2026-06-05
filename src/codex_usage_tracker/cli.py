@@ -67,6 +67,7 @@ from codex_usage_tracker.reports import (
     build_expensive_calls_report,
     build_pricing_coverage_report,
     build_query_report,
+    build_recommendations_report,
     build_summary_report,
 )
 from codex_usage_tracker.server import serve_dashboard
@@ -130,6 +131,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_reset_db_parser(subparsers)
     _add_summary_parser(subparsers)
     _add_query_parser(subparsers)
+    _add_recommendations_parser(subparsers)
     _add_session_parser(subparsers)
     _add_context_parser(subparsers)
     _add_dashboard_parsers(subparsers)
@@ -321,6 +323,24 @@ def _add_query_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPa
         dest="as_json",
         help="Accepted for consistency; query always returns JSON.",
     )
+
+
+def _add_recommendations_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    recommendations = subparsers.add_parser(
+        "recommendations",
+        help="Rank aggregate usage rows and threads by action recommendation severity",
+    )
+    recommendations.add_argument("--since", help="Only include calls at or after this ISO date/time")
+    recommendations.add_argument("--until", help="Only include calls at or before this ISO date/time")
+    recommendations.add_argument("--model")
+    recommendations.add_argument("--effort")
+    recommendations.add_argument("--thread")
+    recommendations.add_argument("--project")
+    recommendations.add_argument("--min-score", type=float)
+    recommendations.add_argument("--limit", type=int, default=20, help="Maximum rows to return; use 0 for all")
+    recommendations.add_argument("--json", action="store_true", dest="as_json")
 
 
 def _add_session_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -839,6 +859,29 @@ def _run_query(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_recommendations(args: argparse.Namespace) -> int:
+    report = build_recommendations_report(
+        db_path=args.db,
+        pricing_path=args.pricing,
+        allowance_path=args.allowance,
+        projects_path=args.projects,
+        since=args.since,
+        until=args.until,
+        model=args.model,
+        effort=args.effort,
+        thread=args.thread,
+        project=args.project,
+        min_score=args.min_score,
+        limit=args.limit,
+        privacy_mode=args.privacy_mode,
+    )
+    if args.as_json:
+        _print_json(report.payload)
+        return 0
+    print(report.render())
+    return 0
+
+
 def _run_session(args: argparse.Namespace) -> int:
     rows = query_session_usage(args.db, args.session_id, args.limit)
     rows = apply_project_privacy_to_rows(rows, privacy_mode=args.privacy_mode)
@@ -1240,6 +1283,7 @@ _COMMAND_HANDLERS = {
     "reset-db": _run_reset_db,
     "summary": _run_summary,
     "query": _run_query,
+    "recommendations": _run_recommendations,
     "session": _run_session,
     "context": _run_context,
     "dashboard": _run_dashboard,

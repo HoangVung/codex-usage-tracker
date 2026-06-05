@@ -86,6 +86,7 @@ Use `Calls` view when you want to inspect individual model calls.
 - Raw aggregate identifiers and source file metadata are collapsed until you need them.
 - The details panel always reserves a visible scrollbar so long field lists are discoverable before you start scrolling.
 - Pagination appears only when the active Insights, Calls, or Threads view has more than one page.
+- When served from localhost, `/api/usage` accepts `limit` and `offset` so automation can page aggregate rows without loading an entire large history.
 - After you scroll down, the bottom-right `Top` button returns to the top of the dashboard.
 
 Useful interpretation notes:

@@ -22,6 +22,12 @@ DEFAULT_THRESHOLDS: dict[str, float] = {
     "high_cost_usd": 1.00,
 }
 
+SEVERITY_POINTS = {
+    "high": 80,
+    "medium": 45,
+    "review": 20,
+}
+
 
 @dataclass(frozen=True)
 class ThresholdConfig:
@@ -78,6 +84,13 @@ def annotate_rows_with_recommendations(
         copy = dict(row)
         recommendations = action_recommendations(copy, config.thresholds)
         copy["action_recommendations"] = recommendations
+        copy["primary_recommendation"] = recommendations[0] if recommendations else None
+        copy["secondary_recommendations"] = recommendations[1:]
+        copy["primary_signal"] = recommendations[0]["key"] if recommendations else None
+        copy["secondary_signals"] = [
+            recommendation["key"] for recommendation in recommendations[1:]
+        ]
+        copy["recommendation_score"] = recommendation_severity_score(copy, recommendations)
         copy["recommended_action"] = (
             recommendations[0]["action"]
             if recommendations
@@ -91,7 +104,7 @@ def annotate_rows_with_recommendations(
 def action_recommendations(
     row: dict[str, Any],
     thresholds: dict[str, float] | None = None,
-) -> list[dict[str, str]]:
+) -> list[dict[str, Any]]:
     """Return ranked recommendations for one aggregate usage row."""
 
     limits = thresholds or DEFAULT_THRESHOLDS
@@ -209,16 +222,35 @@ def action_recommendations(
     return recommendations
 
 
+def recommendation_severity_score(
+    row: dict[str, Any],
+    recommendations: list[dict[str, Any]] | None = None,
+) -> float:
+    """Return a stable aggregate severity score for recommendation ranking."""
+
+    recs = recommendations if recommendations is not None else action_recommendations(row)
+    if not recs:
+        return 0.0
+    base = sum(SEVERITY_POINTS.get(str(rec.get("severity")), 0) for rec in recs)
+    cost = min(_number(row.get("estimated_cost_usd")) * 25, 60)
+    credits = min(_number(row.get("usage_credits")) * 2.5, 80)
+    context = min(_number(row.get("context_window_percent")) * 60, 60)
+    uncached = min(_number(row.get("uncached_input_tokens")) / 500, 50)
+    cumulative = min(_number(row.get("cumulative_total_tokens")) / 10_000, 50)
+    return round(base + cost + credits + context + uncached + cumulative, 2)
+
+
 def _recommendation(
     key: str,
     severity: str,
     title: str,
     why: str,
     action: str,
-) -> dict[str, str]:
+) -> dict[str, Any]:
     return {
         "key": key,
         "severity": severity,
+        "score": SEVERITY_POINTS.get(severity, 0),
         "title": title,
         "why": why,
         "action": action,

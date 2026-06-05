@@ -225,6 +225,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
     def _handle_usage(self, query: str) -> None:
         params = parse_qs(query)
         limit = _parse_limit(_first(params.get("limit")), self._limit)
+        offset = _parse_offset(_first(params.get("offset")))
         refresh_result = None
         try:
             if _truthy(_first(params.get("refresh"))):
@@ -251,6 +252,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
             payload = dashboard_payload(
                 db_path=self._db_path,
                 limit=limit,
+                offset=offset,
                 pricing_path=self._pricing_path,
                 allowance_path=self._allowance_path,
                 rate_card_path=self._rate_card_path,
@@ -324,6 +326,16 @@ def _parse_limit(value: str | None, default: int | None) -> int | None:
     if limit <= 0:
         return None
     return limit
+
+
+def _parse_offset(value: str | None) -> int:
+    if value is None or value == "":
+        return 0
+    try:
+        offset = int(value)
+    except ValueError:
+        return 0
+    return max(offset, 0)
 
 
 def _utc_now() -> str:

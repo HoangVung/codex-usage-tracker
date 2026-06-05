@@ -210,6 +210,7 @@ def test_dashboard_event_query_uses_sql_prefilters(tmp_path: Path) -> None:
         limit=0,
         thread="Add Codex token tracking",
     )
+    offset_rows = query_dashboard_events(db_path=db_path, limit=2, offset=2)
     session_rows = query_dashboard_events(db_path=db_path, limit=0, thread=SESSION_ID)
     since_rows = query_dashboard_events(db_path=db_path, limit=0, since="2026-05-17")
     future_rows = query_dashboard_events(db_path=db_path, limit=0, until="2000-01-01")
@@ -219,6 +220,10 @@ def test_dashboard_event_query_uses_sql_prefilters(tmp_path: Path) -> None:
     assert {row["effort"] for row in effort_rows} == {"xhigh"}
     assert {row["total_tokens"] for row in token_rows} == {100, 200}
     assert {row["session_id"] for row in thread_rows} >= {SESSION_ID, SECOND_SESSION_ID}
+    assert len(offset_rows) == 2
+    assert {row["record_id"] for row in offset_rows}.isdisjoint(
+        {row["record_id"] for row in query_dashboard_events(db_path=db_path, limit=2)}
+    )
     assert {row["session_id"] for row in session_rows} == {SESSION_ID}
     assert len(since_rows) == 4
     assert future_rows == []
@@ -596,6 +601,11 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
             timeout=5,
         ) as response:
             all_payload = json.loads(response.read().decode("utf-8"))
+        with urllib.request.urlopen(  # noqa: S310 - local test server only
+            f"http://127.0.0.1:{server.server_port}/api/usage?limit=2&offset=2",
+            timeout=5,
+        ) as response:
+            offset_payload = json.loads(response.read().decode("utf-8"))
         forbidden_origin = _http_error_json(
             f"http://127.0.0.1:{server.server_port}/api/usage",
             headers={"Origin": "http://example.test"},
@@ -613,6 +623,9 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert limited_payload["loaded_row_count"] == 2
     assert limited_payload["total_available_rows"] == 4
     assert limited_payload["limit"] == 2
+    assert limited_payload["offset"] == 0
+    assert limited_payload["has_more"] is True
+    assert limited_payload["next_offset"] == 2
     assert content_security_policy is not None
     assert "connect-src 'self'" in content_security_policy
     assert "unsafe-inline" not in content_security_policy
@@ -621,7 +634,19 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert all_payload["loaded_row_count"] == 4
     assert all_payload["total_available_rows"] == 4
     assert all_payload["limit"] is None
+    assert all_payload["offset"] == 0
+    assert all_payload["has_more"] is False
     assert all_payload["limit_label"] == "All"
+    assert len(offset_payload["rows"]) == 2
+    assert offset_payload["loaded_row_count"] == 2
+    assert offset_payload["total_available_rows"] == 4
+    assert offset_payload["limit"] == 2
+    assert offset_payload["offset"] == 2
+    assert offset_payload["has_more"] is False
+    assert offset_payload["next_offset"] is None
+    assert {row["record_id"] for row in offset_payload["rows"]}.isdisjoint(
+        {row["record_id"] for row in limited_payload["rows"]}
+    )
     assert limited_payload["pricing_configured"] is True
     assert limited_payload["allowance_configured"] is False
     assert limited_payload["allowance_source"]["name"] == "OpenAI Codex rate card"
@@ -792,6 +817,11 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
         limit=2,
         privacy_mode="strict",
     )
+    recommendations_json = mcp_server.usage_recommendations(
+        limit=2,
+        response_format="json",
+        privacy_mode="strict",
+    )
     pricing_coverage = mcp_server.usage_pricing_coverage()
     pricing_coverage_json = mcp_server.usage_pricing_coverage(response_format="json")
     session = mcp_server.session_usage(session_id=SESSION_ID)
@@ -814,6 +844,7 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
         summary_json,
         expensive_json,
         query_json,
+        recommendations_json,
         pricing_coverage_json,
         session_json,
         context_disabled_json,
@@ -841,6 +872,10 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert query_json["rows"][0]["pricing_model"] == "gpt-5.5"
     assert query_json["rows"][0]["cwd"].startswith("[redacted cwd:")
     assert query_json["rows"][0]["project_relative_cwd"] is None
+    assert recommendations_json["schema"] == "codex-usage-tracker-recommendations-v1"
+    assert recommendations_json["row_count"] >= 1
+    assert recommendations_json["rows"][0]["recommendation_score"] > 0
+    assert recommendations_json["threads"]
     assert "Codex pricing coverage" in pricing_coverage
     assert pricing_coverage_json["schema"] == "codex-usage-tracker-pricing-coverage-v1"
     assert SESSION_ID in session

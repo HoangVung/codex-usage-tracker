@@ -39,6 +39,7 @@ REQUIRED_FILES = [
     "docs/assets/dashboard-threads.png",
     "docs/assets/dashboard-details.png",
     "scripts/check_release.py",
+    "scripts/benchmark_synthetic_history.py",
     ".github/workflows/ci.yml",
     ".github/workflows/pricing-compat.yml",
     ".codex-plugin/plugin.json",
@@ -81,6 +82,7 @@ WHEEL_REQUIRED_MEMBERS = {
 }
 SDIST_REQUIRED_MEMBERS = {
     "docs/cli-json-schemas.md",
+    "scripts/benchmark_synthetic_history.py",
     "skills/codex-usage-api/SKILL.md",
     "skills/codex-usage-tracker/SKILL.md",
     "skills/codex-usage-tracker/scripts/run_mcp.py",

@@ -11,6 +11,7 @@ The installed `codex-usage-api` skill is the recommended conversational entrypoi
 | What used the most? | `most_expensive_usage_calls(response_format="json")`, then `usage_summary(group_by="thread", response_format="json")` |
 | Which project, thread, or model is driving usage? | `usage_summary(group_by="project" \| "thread" \| "model", response_format="json")` |
 | Why did usage spike? | `usage_query(...)` with `since`, `project`, `thread`, `model`, `effort`, `min_tokens`, or `min_credits` filters |
+| What should I inspect next? | `usage_recommendations(response_format="json")` |
 | What is estimated or unpriced? | `usage_pricing_coverage(response_format="json")`, `usage_query(pricing_status="unpriced")`, or `usage_query(credit_confidence="estimated")` |
 | How does this affect my allowance? | `usage_query(...)` rows with `usage_credits`, `usage_credit_confidence`, and allowance annotations |
 | What happened in one session? | `session_usage(session_id=..., response_format="json")` |
@@ -37,6 +38,7 @@ Tracked schema ids:
 | `codex-usage-tracker-reset-db-v1` | CLI `reset-db --yes --json` |
 | `codex-usage-tracker-summary-v1` | CLI `summary --json`, CLI `expensive --json`, MCP summary/expensive JSON |
 | `codex-usage-tracker-query-v1` | CLI `query`, MCP `usage_query(...)` |
+| `codex-usage-tracker-recommendations-v1` | CLI `recommendations --json`, MCP `usage_recommendations(response_format="json")` |
 | `codex-usage-tracker-session-v1` | CLI `session --json`, MCP `session_usage(response_format="json")` |
 | `codex-usage-tracker-context-v1` | CLI `context`, MCP `usage_call_context` when raw context is explicitly enabled |
 | `codex-usage-tracker-context-disabled-v1` | MCP `usage_call_context` when raw context is disabled |
@@ -144,6 +146,44 @@ Supported filters:
 
 Privacy mode affects returned metadata after matching rows. `redacted` hides raw cwd/source paths, hides Git remote labels, and hashes unnamed project names. `strict` also hides project-relative cwd, Git branch, and tags. Configured project aliases are treated as explicit display opt-ins.
 
+## Recommendations
+
+Command:
+
+```bash
+codex-usage-tracker recommendations --since 2026-06-01 --limit 10 --json
+```
+
+MCP:
+
+- `usage_recommendations(response_format="json")`
+
+Schema: `codex-usage-tracker-recommendations-v1`
+
+```json
+{
+  "schema": "codex-usage-tracker-recommendations-v1",
+  "filters": {
+    "since": "2026-06-01",
+    "until": null,
+    "model": null,
+    "effort": null,
+    "thread": null,
+    "project": null,
+    "min_score": null,
+    "limit": 10,
+    "privacy_mode": "normal"
+  },
+  "row_count": 1,
+  "total_matched_rows": 1,
+  "truncated": false,
+  "threads": [],
+  "rows": []
+}
+```
+
+Rows include `recommendation_score`, `primary_recommendation`, `secondary_recommendations`, `primary_signal`, `secondary_signals`, `recommended_action`, and `flag_explanations`. Thread rollups summarize the highest-priority threads using the same aggregate-only signals.
+
 ## Session
 
 Command:
@@ -215,6 +255,7 @@ Most setup and file-writing commands accept `--json` and return a schema-specifi
 - `dashboard --json`: `codex-usage-tracker-dashboard-v1`
 - `export --json`: `codex-usage-tracker-export-v1`
 - `pricing-coverage --json`
+- `recommendations --json`
 - `init-pricing --json`, `update-pricing --json`, `pin-pricing --json`
 - `init-allowance --json`, `parse-allowance --json`
 - `update-rate-card --json`
