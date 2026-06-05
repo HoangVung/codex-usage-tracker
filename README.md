@@ -134,6 +134,7 @@ Then:
 
 For a screenshot-driven walkthrough, see [`docs/dashboard-guide.md`](docs/dashboard-guide.md).
 Generated dashboards also link to a bundled local HTML copy of the guide. Set `CODEX_USAGE_TRACKER_DOCS_URL` if you want generated dashboards to point at a hosted docs page instead.
+For codebase boundaries and extension rules, see [`docs/architecture.md`](docs/architecture.md).
 
 ## Development Setup
 

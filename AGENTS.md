@@ -16,6 +16,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `src/codex_usage_tracker/` - parser, SQLite store, reports, dashboard, CLI, and MCP server.
 - `src/codex_usage_tracker/context.py` - on-demand raw-context reader for one selected usage record.
 - `src/codex_usage_tracker/reports.py` - shared application/report services used by CLI and MCP wrappers.
+- `src/codex_usage_tracker/api_payloads.py` - shared stable JSON payload builders for CLI and MCP surfaces.
 - `src/codex_usage_tracker/schema.py` - single source of truth for persisted usage-event columns.
 - `src/codex_usage_tracker/threads.py` - thread attachment inference used by dashboard payload generation.
 - `src/codex_usage_tracker/pricing_config.py`, `pricing_openai.py`, `pricing_estimates.py`, and `costing.py` - pricing config, source parsing, estimate policy, and cost calculations behind the `pricing.py` facade.
@@ -31,7 +32,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `scripts/check_release.py` - release-readiness checks for docs, versions, packaging, wheel contents, and tracked secret patterns.
 - `.github/workflows/ci.yml` - GitHub Actions test and package build workflow.
 - `.github/workflows/pricing-compat.yml` - scheduled/manual non-blocking live pricing parser compatibility check.
-- `docs/dashboard-guide.md` and `docs/assets/` - screenshot-driven dashboard usage guide built from synthetic aggregate fixture data.
+- `docs/dashboard-guide.md`, `docs/architecture.md`, and `docs/assets/` - usage guide, architecture notes, and screenshots built from synthetic aggregate fixture data.
 - `tests/` - synthetic fixtures and unit tests.
 
 ## Setup

@@ -9,6 +9,7 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
+from codex_usage_tracker.api_payloads import session_payload
 from codex_usage_tracker.allowance import write_allowance_template
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
@@ -106,14 +107,7 @@ def session_usage(
 
     rows = query_session_usage(DEFAULT_DB_PATH, session_id=session_id, limit=limit)
     if response_format == "json":
-        return {
-            "schema": "codex-usage-tracker-session-v1",
-            "requested_session_id": session_id,
-            "resolved_session_id": rows[0].get("session_id") if rows else session_id,
-            "limit": limit,
-            "row_count": len(rows),
-            "rows": rows,
-        }
+        return session_payload(rows, requested_session_id=session_id, limit=limit)
     return format_session(rows)
 
 

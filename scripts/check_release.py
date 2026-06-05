@@ -31,6 +31,7 @@ REQUIRED_FILES = [
     "SECURITY.md",
     "MANIFEST.in",
     "AGENTS.md",
+    "docs/architecture.md",
     "docs/dashboard-guide.md",
     "docs/cli-json-schemas.md",
     "docs/assets/dashboard-insights.png",

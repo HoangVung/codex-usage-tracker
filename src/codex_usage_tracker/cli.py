@@ -10,6 +10,14 @@ from pathlib import Path
 from typing import Any
 
 from codex_usage_tracker import __version__
+from codex_usage_tracker.api_payloads import (
+    error_code,
+    path_payload,
+    plugin_install_payload,
+    plugin_uninstall_payload,
+    refresh_result_payload,
+    session_payload,
+)
 from codex_usage_tracker.allowance import (
     update_rate_card,
     write_allowance_from_text,
@@ -74,7 +82,7 @@ def main() -> int:
     except BrokenPipeError:
         return 1
     except (FileExistsError, FileNotFoundError, PermissionError, RuntimeError, ValueError, OSError) as exc:
-        print(f"Error: [{_error_code(exc)}] {exc}", file=sys.stderr)
+        print(f"Error: [{error_code(exc)}] {exc}", file=sys.stderr)
         return 1
 
 
@@ -538,76 +546,6 @@ def _print_json(payload: dict[str, Any]) -> None:
     print(json.dumps(payload, indent=2, sort_keys=True, default=str), flush=True)
 
 
-def _error_code(exc: BaseException) -> str:
-    if isinstance(exc, ValueError):
-        return "invalid_value"
-    if isinstance(exc, FileExistsError):
-        return "file_exists"
-    if isinstance(exc, FileNotFoundError):
-        return "file_not_found"
-    if isinstance(exc, PermissionError):
-        return "permission_denied"
-    if isinstance(exc, RuntimeError):
-        return "runtime_error"
-    if isinstance(exc, OSError):
-        return "os_error"
-    return "error"
-
-
-def _path_payload(path: Path) -> str:
-    return str(path.expanduser())
-
-
-def _refresh_result_payload(result: Any, *, schema: str) -> dict[str, Any]:
-    return {
-        "schema": schema,
-        "scanned_files": result.scanned_files,
-        "parsed_events": result.parsed_events,
-        "skipped_events": result.skipped_events,
-        "inserted_or_updated_events": result.inserted_or_updated_events,
-        "db_path": result.db_path,
-        "parser_diagnostics": result.parser_diagnostics,
-    }
-
-
-def _plugin_install_payload(result: Any, *, schema: str) -> dict[str, Any]:
-    return {
-        "schema": schema,
-        "plugin_dir": _path_payload(result.plugin_dir),
-        "marketplace_path": _path_payload(result.marketplace_path),
-        "python_executable": _path_payload(result.python_executable),
-        "replaced_existing": result.replaced_existing,
-        "restart_required": True,
-    }
-
-
-def _plugin_uninstall_payload(result: Any) -> dict[str, Any]:
-    return {
-        "schema": "codex-usage-tracker-plugin-uninstall-v1",
-        "plugin_dir": _path_payload(result.plugin_dir),
-        "marketplace_path": _path_payload(result.marketplace_path),
-        "removed_plugin_path": result.removed_plugin_path,
-        "removed_marketplace_entry": result.removed_marketplace_entry,
-        "restart_required": True,
-    }
-
-
-def _session_payload(
-    rows: list[dict[str, Any]],
-    *,
-    requested_session_id: str | None,
-    limit: int,
-) -> dict[str, Any]:
-    return {
-        "schema": "codex-usage-tracker-session-v1",
-        "requested_session_id": requested_session_id,
-        "resolved_session_id": rows[0].get("session_id") if rows else requested_session_id,
-        "limit": limit,
-        "row_count": len(rows),
-        "rows": rows,
-    }
-
-
 def _run_setup(args: argparse.Namespace) -> int:
     lines = ["Codex Usage Tracker setup summary", ""]
     codex_home_exists = args.codex_home.expanduser().exists()
@@ -626,7 +564,7 @@ def _run_setup(args: argparse.Namespace) -> int:
     pricing_payload: dict[str, Any]
     if args.skip_pricing:
         lines.append("Pricing: skipped")
-        pricing_payload = {"status": "skipped", "path": _path_payload(args.pricing)}
+        pricing_payload = {"status": "skipped", "path": path_payload(args.pricing)}
     elif args.update_pricing:
         pricing_result = update_pricing_from_openai_docs(args.pricing)
         lines.append(
@@ -634,7 +572,7 @@ def _run_setup(args: argparse.Namespace) -> int:
         )
         pricing_payload = {
             "status": "updated",
-            "path": _path_payload(pricing_result.path),
+            "path": path_payload(pricing_result.path),
             "source_url": pricing_result.source_url,
             "tier": pricing_result.tier,
             "fetched_at": pricing_result.fetched_at,
@@ -643,11 +581,11 @@ def _run_setup(args: argparse.Namespace) -> int:
         }
     elif args.pricing.expanduser().exists():
         lines.append(f"Pricing: existing config at {args.pricing}")
-        pricing_payload = {"status": "existing", "path": _path_payload(args.pricing)}
+        pricing_payload = {"status": "existing", "path": path_payload(args.pricing)}
     else:
         pricing_output = write_pricing_template(args.pricing)
         lines.append(f"Pricing: wrote local template at {pricing_output}")
-        pricing_payload = {"status": "initialized", "path": _path_payload(pricing_output)}
+        pricing_payload = {"status": "initialized", "path": path_payload(pricing_output)}
     refresh_result = refresh_usage_index(
         codex_home=args.codex_home,
         db_path=args.db,
@@ -675,14 +613,14 @@ def _run_setup(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-setup-v1",
-                "codex_home": _path_payload(args.codex_home),
+                "codex_home": path_payload(args.codex_home),
                 "codex_home_exists": codex_home_exists,
-                "plugin": _plugin_install_payload(
+                "plugin": plugin_install_payload(
                     install_result,
                     schema="codex-usage-tracker-plugin-install-v1",
                 ),
                 "pricing": pricing_payload,
-                "refresh": _refresh_result_payload(
+                "refresh": refresh_result_payload(
                     refresh_result,
                     schema="codex-usage-tracker-refresh-v1",
                 ),
@@ -713,7 +651,7 @@ def _run_install_plugin(args: argparse.Namespace) -> int:
         force=args.force,
     )
     if args.as_json:
-        _print_json(_plugin_install_payload(result, schema="codex-usage-tracker-plugin-install-v1"))
+        _print_json(plugin_install_payload(result, schema="codex-usage-tracker-plugin-install-v1"))
         return 0
     replacement_note = " Replaced existing plugin path." if result.replaced_existing else ""
     print(f"Installed Codex Usage Tracker plugin at {result.plugin_dir}.{replacement_note}")
@@ -731,7 +669,7 @@ def _run_upgrade_plugin(args: argparse.Namespace) -> int:
         force=True,
     )
     if args.as_json:
-        _print_json(_plugin_install_payload(result, schema="codex-usage-tracker-plugin-upgrade-v1"))
+        _print_json(plugin_install_payload(result, schema="codex-usage-tracker-plugin-upgrade-v1"))
         return 0
     print(f"Upgraded Codex Usage Tracker plugin at {result.plugin_dir}.")
     print(f"MCP Python: {result.python_executable}")
@@ -746,7 +684,7 @@ def _run_uninstall_plugin(args: argparse.Namespace) -> int:
         marketplace_path=args.marketplace,
     )
     if args.as_json:
-        _print_json(_plugin_uninstall_payload(result))
+        _print_json(plugin_uninstall_payload(result))
         return 0
     print(
         f"Removed plugin path: {'yes' if result.removed_plugin_path else 'already absent'} "
@@ -767,7 +705,7 @@ def _run_refresh(args: argparse.Namespace) -> int:
         include_archived=args.include_archived,
     )
     if args.as_json:
-        _print_json(_refresh_result_payload(result, schema="codex-usage-tracker-refresh-v1"))
+        _print_json(refresh_result_payload(result, schema="codex-usage-tracker-refresh-v1"))
         return 0
     print(
         f"Scanned {result.scanned_files} files, parsed {result.parsed_events} "
@@ -814,7 +752,7 @@ def _run_rebuild_index(args: argparse.Namespace) -> int:
         include_archived=args.include_archived,
     )
     if args.as_json:
-        _print_json(_refresh_result_payload(result, schema="codex-usage-tracker-rebuild-index-v1"))
+        _print_json(refresh_result_payload(result, schema="codex-usage-tracker-rebuild-index-v1"))
         return 0
     print(
         f"Rebuilt aggregate index: scanned {result.scanned_files} files, parsed "
@@ -890,7 +828,7 @@ def _run_session(args: argparse.Namespace) -> int:
     rows = query_session_usage(args.db, args.session_id, args.limit)
     if args.as_json:
         _print_json(
-            _session_payload(rows, requested_session_id=args.session_id, limit=args.limit)
+            session_payload(rows, requested_session_id=args.session_id, limit=args.limit)
         )
         return 0
     print(format_session(rows))
@@ -925,7 +863,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-dashboard-v1",
-                "dashboard_path": _path_payload(output),
+                "dashboard_path": path_payload(output),
                 "file_url": output.resolve().as_uri(),
                 "opened": args.open,
                 "limit": None if args.limit <= 0 else args.limit,
@@ -942,7 +880,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
 def _run_open_dashboard(args: argparse.Namespace) -> int:
     refresh_payload = None
     if args.refresh:
-        refresh_payload = _refresh_result_payload(
+        refresh_payload = refresh_result_payload(
             refresh_usage_index(codex_home=args.codex_home, db_path=args.db),
             schema="codex-usage-tracker-refresh-v1",
         )
@@ -961,7 +899,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-open-dashboard-v1",
-                "dashboard_path": _path_payload(output),
+                "dashboard_path": path_payload(output),
                 "file_url": output.resolve().as_uri(),
                 "opened": True,
                 "limit": None if args.limit <= 0 else args.limit,
@@ -982,7 +920,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
                 "schema": "codex-usage-tracker-serve-dashboard-v1",
                 "host": args.host,
                 "port": args.port,
-                "dashboard_path": _path_payload(args.output),
+                "dashboard_path": path_payload(args.output),
                 "limit": None if args.limit <= 0 else args.limit,
                 "since": args.since,
                 "context_api": "disabled" if args.no_context_api else args.context_api,
@@ -1048,7 +986,7 @@ def _run_export(args: argparse.Namespace) -> int:
             {
                 "schema": "codex-usage-tracker-export-v1",
                 "rows": count,
-                "csv_path": _path_payload(args.output),
+                "csv_path": path_payload(args.output),
                 "limit": args.limit,
             }
         )
@@ -1063,7 +1001,7 @@ def _run_init_pricing(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-init-pricing-v1",
-                "pricing_path": _path_payload(output),
+                "pricing_path": path_payload(output),
                 "created": True,
             }
         )
@@ -1084,13 +1022,13 @@ def _run_update_pricing(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-update-pricing-v1",
-                "pricing_path": _path_payload(result.path),
+                "pricing_path": path_payload(result.path),
                 "source_url": result.source_url,
                 "tier": result.tier,
                 "fetched_at": result.fetched_at,
                 "model_count": result.model_count,
                 "estimated_model_count": result.estimated_model_count,
-                "backup_path": _path_payload(result.backup_path) if result.backup_path else None,
+                "backup_path": path_payload(result.backup_path) if result.backup_path else None,
             }
         )
         return 0
@@ -1118,8 +1056,8 @@ def _run_pin_pricing(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-pin-pricing-v1",
-                "pricing_path": _path_payload(output),
-                "source_pricing_path": _path_payload(args.pricing),
+                "pricing_path": path_payload(output),
+                "source_pricing_path": path_payload(args.pricing),
             }
         )
         return 0
@@ -1134,7 +1072,7 @@ def _run_init_allowance(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-init-allowance-v1",
-                "allowance_path": _path_payload(output),
+                "allowance_path": path_payload(output),
                 "created": True,
             }
         )
@@ -1158,7 +1096,7 @@ def _run_parse_allowance(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-parse-allowance-v1",
-                "allowance_path": _path_payload(output),
+                "allowance_path": path_payload(output),
                 "updated": True,
             }
         )
@@ -1176,12 +1114,12 @@ def _run_update_rate_card(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-update-rate-card-v1",
-                "rate_card_path": _path_payload(result.path),
+                "rate_card_path": path_payload(result.path),
                 "source_url": result.source_url,
                 "fetched_at": result.fetched_at,
                 "model_count": result.model_count,
                 "alias_count": result.alias_count,
-                "backup_path": _path_payload(result.backup_path) if result.backup_path else None,
+                "backup_path": path_payload(result.backup_path) if result.backup_path else None,
             }
         )
         return 0
@@ -1200,7 +1138,7 @@ def _run_init_thresholds(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-init-thresholds-v1",
-                "thresholds_path": _path_payload(output),
+                "thresholds_path": path_payload(output),
                 "created": True,
             }
         )
@@ -1215,7 +1153,7 @@ def _run_init_projects(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-init-projects-v1",
-                "projects_path": _path_payload(output),
+                "projects_path": path_payload(output),
                 "created": True,
             }
         )
@@ -1239,7 +1177,7 @@ def _run_support_bundle(args: argparse.Namespace) -> int:
         _print_json(
             {
                 "schema": "codex-usage-tracker-support-bundle-v1",
-                "support_bundle_path": _path_payload(output),
+                "support_bundle_path": path_payload(output),
                 "privacy": {
                     "contains_raw_logs": False,
                     "contains_prompts": False,
