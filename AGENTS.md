@@ -54,9 +54,11 @@ python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
 codex-usage-tracker doctor
+codex-usage-tracker doctor --suggest-repair
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help
 codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
+codex-usage-tracker support-bundle --output /tmp/codex-usage-support.json
 codex-usage-tracker pricing-coverage
 codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 5

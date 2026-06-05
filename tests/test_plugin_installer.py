@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from codex_usage_tracker.diagnostics import run_doctor
-from codex_usage_tracker.plugin_installer import install_plugin
+from codex_usage_tracker.plugin_installer import install_plugin, uninstall_plugin
 
 
 def test_install_plugin_writes_generated_wrapper_and_marketplace(tmp_path: Path) -> None:
@@ -106,6 +106,33 @@ def test_install_plugin_force_replaces_existing_symlink(tmp_path: Path) -> None:
     assert plugin_dir.is_dir()
     assert not plugin_dir.is_symlink()
     assert (plugin_dir / ".codex-plugin" / "plugin.json").exists()
+
+
+def test_uninstall_plugin_removes_only_tracker_wrapper_and_marketplace_entry(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
+    marketplace_path = tmp_path / "marketplace.json"
+    install_plugin(
+        plugin_dir=plugin_dir,
+        marketplace_path=marketplace_path,
+        python_executable=tmp_path / ".venv" / "bin" / "python",
+    )
+
+    result = uninstall_plugin(plugin_dir=plugin_dir, marketplace_path=marketplace_path)
+    marketplace = json.loads(marketplace_path.read_text())
+
+    assert result.removed_plugin_path is True
+    assert result.removed_marketplace_entry is True
+    assert not plugin_dir.exists()
+    assert marketplace["plugins"] == []
+
+
+def test_uninstall_plugin_refuses_unrelated_path(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "README.md").write_text("not a generated plugin", encoding="utf-8")
+
+    with pytest.raises(FileExistsError):
+        uninstall_plugin(plugin_dir=plugin_dir, marketplace_path=tmp_path / "marketplace.json")
 
 
 def test_doctor_accepts_generated_plugin_directory(tmp_path: Path) -> None:

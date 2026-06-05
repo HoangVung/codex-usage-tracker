@@ -24,6 +24,14 @@ class PluginInstallResult:
     replaced_existing: bool
 
 
+@dataclass(frozen=True)
+class PluginUninstallResult:
+    plugin_dir: Path
+    marketplace_path: Path
+    removed_plugin_path: bool
+    removed_marketplace_entry: bool
+
+
 def install_plugin(
     *,
     plugin_dir: Path = DEFAULT_PLUGIN_LINK,
@@ -53,6 +61,32 @@ def install_plugin(
     )
 
 
+def uninstall_plugin(
+    *,
+    plugin_dir: Path = DEFAULT_PLUGIN_LINK,
+    marketplace_path: Path = DEFAULT_MARKETPLACE_PATH,
+) -> PluginUninstallResult:
+    """Remove the package-owned local Codex plugin wrapper and marketplace entry."""
+
+    plugin_dir = plugin_dir.expanduser()
+    marketplace_path = marketplace_path.expanduser()
+    removed_plugin_path = _remove_plugin_dir(plugin_dir)
+    removed_marketplace_entry = False
+    if marketplace_path.exists():
+        marketplace = _load_marketplace(marketplace_path)
+        removed_marketplace_entry = _remove_marketplace_entry(marketplace)
+        marketplace_path.write_text(
+            json.dumps(marketplace, indent=2, sort_keys=False) + "\n",
+            encoding="utf-8",
+        )
+    return PluginUninstallResult(
+        plugin_dir=plugin_dir,
+        marketplace_path=marketplace_path,
+        removed_plugin_path=removed_plugin_path,
+        removed_marketplace_entry=removed_marketplace_entry,
+    )
+
+
 def _prepare_plugin_dir(plugin_dir: Path, *, force: bool) -> bool:
     if plugin_dir.is_symlink():
         if not force:
@@ -74,6 +108,25 @@ def _prepare_plugin_dir(plugin_dir: Path, *, force: bool) -> bool:
         return True
     plugin_dir.mkdir(parents=True, exist_ok=True)
     return False
+
+
+def _remove_plugin_dir(plugin_dir: Path) -> bool:
+    if plugin_dir.is_symlink():
+        target = plugin_dir.resolve()
+        if target.exists() and not _is_existing_tracker_plugin(target):
+            raise FileExistsError(
+                f"{plugin_dir} points to {target}, which does not look like a Codex Usage Tracker plugin."
+            )
+        plugin_dir.unlink()
+        return True
+    if not plugin_dir.exists():
+        return False
+    if not _is_existing_tracker_plugin(plugin_dir):
+        raise FileExistsError(
+            f"{plugin_dir} exists but does not look like a Codex Usage Tracker plugin."
+        )
+    shutil.rmtree(plugin_dir)
+    return True
 
 
 def _is_existing_tracker_plugin(plugin_dir: Path) -> bool:
@@ -229,6 +282,17 @@ def _upsert_marketplace_entry(marketplace: dict[str, Any], plugin_dir: Path) -> 
             plugins[index] = entry
             return
     plugins.append(entry)
+
+
+def _remove_marketplace_entry(marketplace: dict[str, Any]) -> bool:
+    plugins = marketplace["plugins"]
+    before = len(plugins)
+    marketplace["plugins"] = [
+        entry
+        for entry in plugins
+        if not (isinstance(entry, dict) and entry.get("name") == PLUGIN_NAME)
+    ]
+    return len(marketplace["plugins"]) != before
 
 
 def _marketplace_plugin_path(plugin_dir: Path) -> str:

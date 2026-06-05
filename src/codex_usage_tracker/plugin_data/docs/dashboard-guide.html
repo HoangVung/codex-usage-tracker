@@ -78,7 +78,8 @@
 
     <h2>Open The Dashboard</h2>
     <p>For the best experience, run the localhost dashboard server:</p>
-    <pre><code>codex-usage-tracker update-pricing
+    <pre><code>codex-usage-tracker setup
+codex-usage-tracker update-pricing
 codex-usage-tracker serve-dashboard --open</code></pre>
     <p>For optional allowance context, run <code>codex-usage-tracker init-allowance</code> and copy current 5-hour or weekly remaining usage from Codex Usage or <code>/status</code> into the local template.</p>
     <p>The server enables live aggregate refresh and on-demand context loading. Static file mode can still filter, sort, and inspect aggregate fields, but cannot refresh logs or load context.</p>
@@ -94,7 +95,7 @@ codex-usage-tracker serve-dashboard --open</code></pre>
 
     <h2>Calls View</h2>
     <img src="assets/dashboard-calls.png" alt="Calls view showing filters, totals, table rows, and details panel.">
-    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by attention, time, thread, model, tokens, cost, highest Codex credits, cache, context, or signals. Hover or click a row to pin grouped aggregate fields in <code>Call Details</code>. Top cards show cached input, uncached input, Codex credit usage, and optional usage remaining. The header uses short status chips; exact refresh time and source details live in hover titles so live refreshes do not reflow the page.</p>
+    <p>Use <code>Calls</code> view to inspect individual model calls. Sort by attention, time, thread, model, tokens, cost, highest Codex credits, cache, context, or signals. Hover or click a row to pin grouped aggregate fields in <code>Call Details</code>. Top cards show cached input, uncached input, Codex credit usage, and optional usage remaining. The header uses short status chips; exact refresh time and source details live in hover titles so live refreshes do not reflow the page. A <code>Parser warnings</code> chip appears only when the latest refresh reports skipped token events, missing expected token fields, invalid counters, duplicate cumulative snapshots, or unknown event shapes.</p>
     <ul>
       <li><code>Last call total</code> is the selected model call.</li>
       <li><code>Session cumulative</code> is the running total Codex logged for that session.</li>

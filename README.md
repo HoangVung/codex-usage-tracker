@@ -80,7 +80,7 @@ Open a Codex session on your machine and paste this:
 ```text
 Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
 Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
-After installation, run codex-usage-tracker install-plugin, update-pricing, refresh, doctor, and serve-dashboard --open.
+After installation, run codex-usage-tracker setup and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
 ```
 
@@ -90,10 +90,7 @@ Codex should run roughly:
 brew install pipx
 pipx ensurepath
 pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
-codex-usage-tracker install-plugin
-codex-usage-tracker update-pricing
-codex-usage-tracker refresh
-codex-usage-tracker doctor
+codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
 
@@ -107,18 +104,19 @@ Run:
 brew install pipx
 pipx ensurepath
 pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
-codex-usage-tracker install-plugin
-codex-usage-tracker update-pricing
-codex-usage-tracker refresh
+codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
 
-`install-plugin` creates `~/plugins/codex-usage-tracker`, writes a package-owned `.mcp.json` that points at the installed Python executable, and updates `~/.agents/plugins/marketplace.json`. Restart Codex after registration so it discovers the plugin.
+`setup` installs or refreshes the package-owned plugin wrapper, initializes a local pricing template when pricing is missing, refreshes the aggregate index, runs `doctor`, prints a success/failure summary, and tells you whether Codex needs a restart for plugin discovery.
+
+`install-plugin` is still available when you only want plugin registration. It creates `~/plugins/codex-usage-tracker`, writes a package-owned `.mcp.json` that points at the installed Python executable, and updates `~/.agents/plugins/marketplace.json`. Restart Codex after registration so it discovers the plugin.
 
 ## Fastest Useful Workflow
 
 ```bash
 codex-usage-tracker update-pricing
+codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
 
@@ -164,6 +162,18 @@ codex-usage-tracker doctor --suggest-repair
 codex-usage-tracker --version
 python -m codex_usage_tracker --version
 ```
+
+Run or refresh local lifecycle tasks:
+
+```bash
+codex-usage-tracker setup
+codex-usage-tracker upgrade-plugin
+codex-usage-tracker uninstall-plugin
+codex-usage-tracker reset-db --yes
+codex-usage-tracker support-bundle --output ~/.codex-usage-tracker/support-bundle.json
+```
+
+`support-bundle` writes package, Python, OS, doctor, database schema, parser diagnostics, pricing status, and allowance status. It does not include raw logs, prompts, assistant messages, tool output, or context text.
 
 Inspect a single Codex log without writing to SQLite:
 

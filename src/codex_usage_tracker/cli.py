@@ -25,9 +25,10 @@ from codex_usage_tracker.paths import (
     DEFAULT_MARKETPLACE_PATH,
     DEFAULT_PLUGIN_LINK,
     DEFAULT_PRICING_PATH,
+    DEFAULT_SUPPORT_BUNDLE_PATH,
 )
 from codex_usage_tracker.parser import inspect_log, load_session_index
-from codex_usage_tracker.plugin_installer import install_plugin
+from codex_usage_tracker.plugin_installer import install_plugin, uninstall_plugin
 from codex_usage_tracker.pricing import (
     OPENAI_PRICING_MD_URL,
     VALID_PRICING_TIERS,
@@ -47,7 +48,9 @@ from codex_usage_tracker.store import (
     export_usage_csv,
     query_session_usage,
     refresh_usage_index,
+    reset_usage_database,
 )
+from codex_usage_tracker.support import build_support_bundle
 from codex_usage_tracker.server import serve_dashboard
 
 
@@ -78,11 +81,15 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     parser.add_argument("--allowance", type=Path, default=DEFAULT_ALLOWANCE_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
+    _add_setup_parser(subparsers)
     _add_doctor_parser(subparsers)
     _add_install_plugin_parser(subparsers)
+    _add_upgrade_plugin_parser(subparsers)
+    _add_uninstall_plugin_parser(subparsers)
     _add_refresh_parser(subparsers)
     _add_inspect_log_parser(subparsers)
     _add_rebuild_index_parser(subparsers)
+    _add_reset_db_parser(subparsers)
     _add_summary_parser(subparsers)
     _add_session_parser(subparsers)
     _add_context_parser(subparsers)
@@ -92,7 +99,37 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_export_parser(subparsers)
     _add_pricing_parsers(subparsers)
     _add_allowance_parser(subparsers)
+    _add_support_bundle_parser(subparsers)
     return parser
+
+
+def _add_setup_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    setup = subparsers.add_parser(
+        "setup",
+        help="Run first-time setup: plugin install, pricing init, refresh, and doctor",
+    )
+    setup.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+    setup.add_argument("--include-archived", action="store_true")
+    setup.add_argument("--plugin-dir", type=Path, default=DEFAULT_PLUGIN_LINK)
+    setup.add_argument("--marketplace", type=Path, default=DEFAULT_MARKETPLACE_PATH)
+    setup.add_argument(
+        "--python",
+        type=Path,
+        default=None,
+        dest="python_executable",
+        help="Python executable Codex should use for the MCP server.",
+    )
+    setup.add_argument(
+        "--force-plugin",
+        action="store_true",
+        help="Replace an existing generated plugin wrapper or source-checkout symlink.",
+    )
+    setup.add_argument("--skip-pricing", action="store_true")
+    setup.add_argument(
+        "--update-pricing",
+        action="store_true",
+        help="Fetch current pricing during setup instead of writing a local template.",
+    )
 
 
 def _add_doctor_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -128,6 +165,35 @@ def _add_install_plugin_parser(
     )
 
 
+def _add_upgrade_plugin_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    upgrade_plugin_cmd = subparsers.add_parser(
+        "upgrade-plugin",
+        help="Refresh the generated local Codex plugin wrapper for this installed package",
+    )
+    upgrade_plugin_cmd.add_argument("--plugin-dir", type=Path, default=DEFAULT_PLUGIN_LINK)
+    upgrade_plugin_cmd.add_argument("--marketplace", type=Path, default=DEFAULT_MARKETPLACE_PATH)
+    upgrade_plugin_cmd.add_argument(
+        "--python",
+        type=Path,
+        default=None,
+        dest="python_executable",
+        help="Python executable Codex should use for the MCP server.",
+    )
+
+
+def _add_uninstall_plugin_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    uninstall_plugin_cmd = subparsers.add_parser(
+        "uninstall-plugin",
+        help="Remove the generated local Codex plugin wrapper and marketplace entry",
+    )
+    uninstall_plugin_cmd.add_argument("--plugin-dir", type=Path, default=DEFAULT_PLUGIN_LINK)
+    uninstall_plugin_cmd.add_argument("--marketplace", type=Path, default=DEFAULT_MARKETPLACE_PATH)
+
+
 def _add_refresh_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
     refresh = subparsers.add_parser("refresh", help="Scan Codex logs into SQLite")
     refresh.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
@@ -153,6 +219,18 @@ def _add_rebuild_index_parser(
     )
     rebuild.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
     rebuild.add_argument("--include-archived", action="store_true")
+
+
+def _add_reset_db_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    reset = subparsers.add_parser(
+        "reset-db",
+        help="Clear tracker-owned aggregate rows and refresh metadata",
+    )
+    reset.add_argument(
+        "--yes",
+        action="store_true",
+        help="Confirm clearing local aggregate usage rows. Raw Codex logs are not touched.",
+    )
 
 
 def _add_summary_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -299,6 +377,70 @@ def _add_allowance_parser(
     allowance.add_argument("--force", action="store_true")
 
 
+def _add_support_bundle_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    support = subparsers.add_parser(
+        "support-bundle",
+        help="Write a privacy-preserving diagnostic bundle for support",
+    )
+    support.add_argument("--output", type=Path, default=DEFAULT_SUPPORT_BUNDLE_PATH)
+    support.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
+
+
+def _run_setup(args: argparse.Namespace) -> int:
+    lines = ["Codex Usage Tracker setup summary", ""]
+    lines.append(
+        f"Codex home: {args.codex_home.expanduser()} "
+        f"({'found' if args.codex_home.expanduser().exists() else 'not found yet'})"
+    )
+    install_result = install_plugin(
+        plugin_dir=args.plugin_dir,
+        marketplace_path=args.marketplace,
+        python_executable=args.python_executable,
+        force=args.force_plugin,
+    )
+    lines.append(f"Plugin: installed at {install_result.plugin_dir}")
+    lines.append(f"MCP Python: {install_result.python_executable}")
+    if args.skip_pricing:
+        lines.append("Pricing: skipped")
+    elif args.update_pricing:
+        pricing_result = update_pricing_from_openai_docs(args.pricing)
+        lines.append(
+            f"Pricing: updated {pricing_result.model_count} entries from {pricing_result.source_url}"
+        )
+    elif args.pricing.expanduser().exists():
+        lines.append(f"Pricing: existing config at {args.pricing}")
+    else:
+        pricing_output = write_pricing_template(args.pricing)
+        lines.append(f"Pricing: wrote local template at {pricing_output}")
+    refresh_result = refresh_usage_index(
+        codex_home=args.codex_home,
+        db_path=args.db,
+        include_archived=args.include_archived,
+    )
+    lines.append(
+        f"Refresh: scanned {refresh_result.scanned_files} files, parsed "
+        f"{refresh_result.parsed_events} events, skipped {refresh_result.skipped_events}"
+    )
+    doctor_report = run_doctor(
+        codex_home=args.codex_home,
+        db_path=args.db,
+        pricing_path=args.pricing,
+        plugin_link=args.plugin_dir,
+        marketplace_path=args.marketplace,
+        suggest_repair=True,
+    )
+    lines.append(f"Doctor: {doctor_report['status']}")
+    if doctor_report.get("repair_suggestions"):
+        lines.append("Repair suggestions:")
+        lines.extend(f"- {suggestion}" for suggestion in doctor_report["repair_suggestions"])
+    lines.append("")
+    lines.append("Restart Codex to discover or refresh the plugin tools.")
+    print("\n".join(lines))
+    return 0 if doctor_report["status"] != "fail" else 1
+
+
 def _run_doctor(args: argparse.Namespace) -> int:
     report = run_doctor(
         db_path=args.db,
@@ -321,6 +463,37 @@ def _run_install_plugin(args: argparse.Namespace) -> int:
     print(f"MCP Python: {result.python_executable}")
     print(f"Updated marketplace: {result.marketplace_path}")
     print("Restart Codex to discover the plugin.")
+    return 0
+
+
+def _run_upgrade_plugin(args: argparse.Namespace) -> int:
+    result = install_plugin(
+        plugin_dir=args.plugin_dir,
+        marketplace_path=args.marketplace,
+        python_executable=args.python_executable,
+        force=True,
+    )
+    print(f"Upgraded Codex Usage Tracker plugin at {result.plugin_dir}.")
+    print(f"MCP Python: {result.python_executable}")
+    print(f"Updated marketplace: {result.marketplace_path}")
+    print("Restart Codex to discover the refreshed plugin.")
+    return 0
+
+
+def _run_uninstall_plugin(args: argparse.Namespace) -> int:
+    result = uninstall_plugin(
+        plugin_dir=args.plugin_dir,
+        marketplace_path=args.marketplace,
+    )
+    print(
+        f"Removed plugin path: {'yes' if result.removed_plugin_path else 'already absent'} "
+        f"({result.plugin_dir})"
+    )
+    print(
+        f"Removed marketplace entry: {'yes' if result.removed_marketplace_entry else 'not present'} "
+        f"({result.marketplace_path})"
+    )
+    print("Restart Codex to unload plugin tools from new sessions.")
     return 0
 
 
@@ -386,6 +559,19 @@ def _run_rebuild_index(args: argparse.Namespace) -> int:
             f"{key}={value}" for key, value in result.parser_diagnostics.items()
         )
         print(f"Parser diagnostics: {diagnostics}")
+    return 0
+
+
+def _run_reset_db(args: argparse.Namespace) -> int:
+    if not args.yes:
+        raise ValueError(
+            "reset-db clears local aggregate usage rows. Re-run with --yes to confirm."
+        )
+    result = reset_usage_database(db_path=args.db)
+    print(
+        f"Cleared {result['deleted_usage_events']} aggregate usage rows from {result['db_path']}."
+    )
+    print("Raw Codex logs were not touched.")
     return 0
 
 
@@ -536,12 +722,29 @@ def _run_init_allowance(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_support_bundle(args: argparse.Namespace) -> int:
+    output = build_support_bundle(
+        output_path=args.output,
+        codex_home=args.codex_home,
+        db_path=args.db,
+        pricing_path=args.pricing,
+        allowance_path=args.allowance,
+    )
+    print(f"Wrote privacy-preserving support bundle to {output}")
+    print("Bundle excludes raw logs, prompts, assistant messages, tool output, and context text.")
+    return 0
+
+
 _COMMAND_HANDLERS = {
+    "setup": _run_setup,
     "doctor": _run_doctor,
     "install-plugin": _run_install_plugin,
+    "upgrade-plugin": _run_upgrade_plugin,
+    "uninstall-plugin": _run_uninstall_plugin,
     "refresh": _run_refresh,
     "inspect-log": _run_inspect_log,
     "rebuild-index": _run_rebuild_index,
+    "reset-db": _run_reset_db,
     "summary": _run_summary,
     "session": _run_session,
     "context": _run_context,
@@ -554,6 +757,7 @@ _COMMAND_HANDLERS = {
     "init-pricing": _run_init_pricing,
     "update-pricing": _run_update_pricing,
     "init-allowance": _run_init_allowance,
+    "support-bundle": _run_support_bundle,
 }
 
 if __name__ == "__main__":

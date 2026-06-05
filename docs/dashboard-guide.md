@@ -9,6 +9,7 @@ This guide uses synthetic aggregate data. The screenshots do not contain prompts
 For the best experience, run the localhost dashboard server:
 
 ```bash
+codex-usage-tracker setup
 codex-usage-tracker update-pricing
 codex-usage-tracker serve-dashboard --open
 ```

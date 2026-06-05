@@ -85,6 +85,18 @@ def rebuild_usage_index(
     )
 
 
+def reset_usage_database(db_path: Path = DEFAULT_DB_PATH) -> dict[str, Any]:
+    """Clear tracker-owned aggregate rows and refresh metadata."""
+
+    with connect(db_path) as conn:
+        init_db(conn)
+        row = conn.execute("SELECT COUNT(*) AS count FROM usage_events").fetchone()
+        deleted_rows = int(row["count"] if row is not None else 0)
+        conn.execute("DELETE FROM usage_events")
+        conn.execute("DELETE FROM refresh_meta")
+    return {"db_path": str(db_path), "deleted_usage_events": deleted_rows}
+
+
 def connect(db_path: Path = DEFAULT_DB_PATH) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path, timeout=5.0)
