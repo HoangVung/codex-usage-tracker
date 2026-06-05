@@ -118,6 +118,7 @@ def generate_dashboard(
     guide_href = _dashboard_guide_href(output_path)
     asset_base = _dashboard_assets_href(output_path)
     stylesheet_href = _versioned_asset_href(output_path, asset_base, "dashboard.css")
+    state_script_src = _versioned_asset_href(output_path, asset_base, "dashboard_state.js")
     script_src = _versioned_asset_href(output_path, asset_base, "dashboard.js")
     previous_payload = _previous_dashboard_payload(output_path)
     payload_dict = dashboard_payload(
@@ -141,6 +142,7 @@ def generate_dashboard(
             payload,
             guide_href=guide_href,
             stylesheet_href=stylesheet_href,
+            state_script_src=state_script_src,
             script_src=script_src,
         ),
         encoding="utf-8",
@@ -281,6 +283,7 @@ def _html(
     guide_href: str | None = None,
     *,
     stylesheet_href: str = "codex-usage-tracker-assets/dashboard.css",
+    state_script_src: str = "codex-usage-tracker-assets/dashboard_state.js",
     script_src: str = "codex-usage-tracker-assets/dashboard.js",
 ) -> str:
     template = _read_dashboard_asset("dashboard_template.html")
@@ -294,6 +297,7 @@ def _html(
         .replace("__STYLESHEET_HREF__", html.escape(stylesheet_href, quote=True))
         .replace("__GUIDE_LINK__", guide_link)
         .replace("__PAYLOAD__", payload)
+        .replace("__STATE_SCRIPT_SRC__", html.escape(state_script_src, quote=True))
         .replace("__SCRIPT_SRC__", html.escape(script_src, quote=True))
     )
 

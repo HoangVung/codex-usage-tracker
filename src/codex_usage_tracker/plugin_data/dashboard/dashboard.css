@@ -455,7 +455,7 @@
     }
     .table-tools {
       display: grid;
-      grid-template-columns: auto minmax(0, 1fr) auto;
+      grid-template-columns: auto minmax(0, 1fr) auto auto;
       align-items: center;
       gap: 12px;
       padding: 12px 16px;
@@ -491,6 +491,34 @@
       color: var(--muted);
       font-size: 12px;
       font-weight: 680;
+    }
+    .table-actions {
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 8px;
+      min-width: 0;
+      white-space: nowrap;
+    }
+    .toolbar-button {
+      min-height: 30px;
+      padding: 4px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--panel);
+      color: var(--blue);
+      font-size: 12px;
+      font-weight: 760;
+      cursor: pointer;
+    }
+    .toolbar-button:hover {
+      background: #eff6ff;
+    }
+    .action-status {
+      min-width: 62px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 720;
     }
     .pager {
       display: inline-flex;
@@ -898,6 +926,7 @@
       .detail { max-height: none; }
       .table-tools { align-items: stretch; grid-template-columns: 1fr; }
       .segmented, .segmented button { width: 100%; }
-      .pager, .load-control { justify-content: space-between; width: 100%; }
+      .pager, .load-control, .table-actions { justify-content: space-between; width: 100%; }
+      .action-status { min-width: 0; }
       .preset-card { grid-template-columns: 1fr; }
     }

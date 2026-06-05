@@ -88,6 +88,11 @@
             <button id="threadsView" type="button" aria-pressed="false">Threads</button>
           </div>
           <div id="tableCaption" class="table-caption">Showing individual model calls.</div>
+          <div class="table-actions" aria-label="Current view actions">
+            <button id="copyViewLink" class="toolbar-button" type="button">Copy link</button>
+            <button id="exportVisible" class="toolbar-button" type="button">Export CSV</button>
+            <span id="actionStatus" class="action-status" aria-live="polite"></span>
+          </div>
           <div id="pager" class="pager" aria-label="Table pages">
             <button id="prevPage" class="pager-button" type="button">Previous</button>
             <span id="pageStatus">Page 1</span>
@@ -118,6 +123,7 @@
   </main>
   <button id="toTop" class="to-top" type="button" aria-label="Back to top">Top</button>
   <script id="usage-data" type="application/json">__PAYLOAD__</script>
+  <script src="__STATE_SCRIPT_SRC__"></script>
   <script src="__SCRIPT_SRC__"></script>
 </body>
 </html>

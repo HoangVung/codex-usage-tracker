@@ -1,5 +1,7 @@
 const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
+    const stateManager = window.CodexUsageDashboardState;
     const urlParams = new URLSearchParams(window.location.search);
+    const initialState = stateManager ? stateManager.read(urlParams) : {};
     let data = payloadRows(initialPayload);
     let pricingConfigured = Boolean(initialPayload.pricing_configured);
     let pricingSource = initialPayload.pricing_source || {};
@@ -36,6 +38,9 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     const autoRefreshEl = document.getElementById('autoRefresh');
     const loadLimitEl = document.getElementById('loadLimit');
     const liveStatusEl = document.getElementById('liveStatus');
+    const copyViewLinkEl = document.getElementById('copyViewLink');
+    const exportVisibleEl = document.getElementById('exportVisible');
+    const actionStatusEl = document.getElementById('actionStatus');
     const prevPageEl = document.getElementById('prevPage');
     const nextPageEl = document.getElementById('nextPage');
     const pageStatusEl = document.getElementById('pageStatus');
@@ -59,10 +64,12 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     const liveRefreshSupported = window.location.protocol !== 'file:';
     const liveRefreshIntervalMs = 10000;
     const pageSize = 500;
-    let activeView = ['calls', 'threads', 'insights'].includes(urlParams.get('view')) ? urlParams.get('view') : 'insights';
-    let sortKey = sortEl.value || 'time';
-    let sortDirection = defaultSortDirection(sortKey);
+    let activeView = ['calls', 'threads', 'insights'].includes(initialState.view) ? initialState.view : 'insights';
+    let sortKey = optionValueExists(sortEl, initialState.sort) ? initialState.sort : sortEl.value || 'attention';
+    let sortDirection = ['asc', 'desc'].includes(initialState.direction) ? initialState.direction : defaultSortDirection(sortKey);
     let activePreset = '';
+    let selectedRecordId = initialState.record || '';
+    let selectedThreadKey = initialState.thread || '';
     let refreshInFlight = false;
     let autoRefreshTimer = null;
     let currentPage = 1;
@@ -274,6 +281,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       }
       loadLimitEl.value = value;
     }
+    function optionValueExists(select, value) {
+      if (!value) return false;
+      return Array.from(select.options || []).some(option => option.value === value);
+    }
     function rebuildDashboardIndexes() {
       rowByRecordId = new Map(data.map(row => [row.record_id, row]));
       threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
@@ -388,6 +399,26 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       rebuildSelectOptions(modelEl, data.map(row => row.model), 'All models');
       rebuildSelectOptions(effortEl, data.map(row => row.effort), 'All efforts');
     }
+    function applyInitialState() {
+      if (!initialState) return;
+      searchEl.value = initialState.search || '';
+      if (optionValueExists(modelEl, initialState.model)) modelEl.value = initialState.model;
+      if (optionValueExists(effortEl, initialState.effort)) effortEl.value = initialState.effort;
+      if (optionValueExists(pricingStatusEl, initialState.confidence)) pricingStatusEl.value = initialState.confidence;
+      if (optionValueExists(sortEl, initialState.sort)) {
+        sortKey = initialState.sort;
+        sortEl.value = sortKey;
+      }
+      if (['asc', 'desc'].includes(initialState.direction)) sortDirection = initialState.direction;
+      if (presetDefinitions.some(preset => preset.key === initialState.preset)) activePreset = initialState.preset;
+      if (initialState.page && Number(initialState.page) > 1) currentPage = Number(initialState.page);
+      if (Array.isArray(initialState.expandedThreads)) {
+        initialState.expandedThreads.forEach(key => expandedThreads.add(key));
+      }
+      if (initialState.expandedThreads && initialState.expandedThreads.length) {
+        initialThreadExpansionApplied = true;
+      }
+    }
     function updatePricingSourceLine() {
       const sourceEl = document.getElementById('pricingSource');
       if (pricingConfigured && pricingSource.url) {
@@ -461,6 +492,72 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       });
       rows.sort(compareCalls);
       return rows;
+    }
+    function currentDashboardState() {
+      return {
+        view: activeView,
+        search: searchEl.value.trim(),
+        model: modelEl.value,
+        effort: effortEl.value,
+        confidence: pricingStatusEl.value,
+        sort: sortKey,
+        direction: sortDirection,
+        preset: activePreset,
+        page: currentPage,
+        record: selectedRecordId,
+        thread: selectedThreadKey,
+        expandedThreads: Array.from(expandedThreads),
+      };
+    }
+    function syncUrlState() {
+      if (!stateManager) return;
+      stateManager.replace(currentDashboardState());
+    }
+    function showActionStatus(message) {
+      actionStatusEl.textContent = message;
+      if (!message) return;
+      window.setTimeout(() => {
+        if (actionStatusEl.textContent === message) actionStatusEl.textContent = '';
+      }, 2200);
+    }
+    async function copyCurrentViewLink() {
+      if (!stateManager) return;
+      const url = stateManager.urlFor(currentDashboardState());
+      try {
+        await stateManager.copyText(url);
+        showActionStatus('Copied');
+      } catch (error) {
+        showActionStatus('Copy failed');
+      }
+    }
+    function exportCurrentRows() {
+      if (!stateManager) return;
+      const rows = filtered();
+      const columns = [
+        { label: 'timestamp', field: 'event_timestamp' },
+        { label: 'thread', field: row => rowThreadLabel(row) },
+        { label: 'project', field: 'project_name' },
+        { label: 'model', field: 'model' },
+        { label: 'effort', field: 'effort' },
+        { label: 'total_tokens', field: 'total_tokens' },
+        { label: 'input_tokens', field: 'input_tokens' },
+        { label: 'cached_input_tokens', field: 'cached_input_tokens' },
+        { label: 'uncached_input_tokens', field: 'uncached_input_tokens' },
+        { label: 'output_tokens', field: 'output_tokens' },
+        { label: 'reasoning_output_tokens', field: 'reasoning_output_tokens' },
+        { label: 'estimated_cost_usd', field: 'estimated_cost_usd' },
+        { label: 'usage_credits', field: 'usage_credits' },
+        { label: 'cache_ratio', field: 'cache_ratio' },
+        { label: 'context_window_percent', field: 'context_window_percent' },
+        { label: 'pricing_model', field: 'pricing_model' },
+        { label: 'usage_credit_confidence', field: 'usage_credit_confidence' },
+        { label: 'recommendation', field: row => row.recommended_action || recommendationSummary(row) },
+        { label: 'record_id', field: 'record_id' },
+      ];
+      const csv = stateManager.toCsv(rows, columns);
+      const suffix = activeView === 'threads' ? 'thread-filtered-calls' : `${activeView}-calls`;
+      stateManager.downloadText(`codex-usage-${suffix}.csv`, csv, 'text/csv;charset=utf-8');
+      showActionStatus(`Exported ${number.format(rows.length)}`);
     }
     function activePresetDefinition() {
       return presetDefinitions.find(preset => preset.key === activePreset) || null;
@@ -1050,6 +1147,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         renderCalls(rows);
       }
       fitModelPills();
+      syncUrlState();
     }
     function renderCalls(rows) {
       const page = paginate(rows);
@@ -1076,14 +1174,21 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           <td><div class="flags">${flags.slice(0, 2).map(flag => `<span class="flag">${escapeHtml(flag)}</span>`).join('')}</div></td>
         `;
         tr.addEventListener('mouseenter', () => showDetail(row));
-        tr.addEventListener('click', () => showDetail(row));
+        tr.addEventListener('click', () => selectRow(row));
         tr.addEventListener('keydown', event => {
           if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
-            showDetail(row);
+            selectRow(row);
           }
         });
         rowsEl.appendChild(tr);
+      }
+      if (!initialDetailApplied && selectedRecordId) {
+        const selected = rows.find(row => row.record_id === selectedRecordId);
+        if (selected) {
+          initialDetailApplied = true;
+          showDetail(selected);
+        }
       }
       if (!initialDetailApplied && urlParams.get('detail') === 'first' && page.items[0]) {
         initialDetailApplied = true;
@@ -1151,7 +1256,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           } else {
             expandedThreads.add(group.key);
           }
-          showThreadDetail(group);
+          selectThread(group);
           render();
         });
         tr.addEventListener('keydown', event => {
@@ -1168,6 +1273,13 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       }
       if (!groups.length) {
         rowsEl.innerHTML = '<tr><td class="empty-state" colspan="8">No threads match the current filters.</td></tr>';
+      }
+      if (!initialDetailApplied && selectedThreadKey) {
+        const selected = groups.find(group => group.key === selectedThreadKey);
+        if (selected) {
+          initialDetailApplied = true;
+          showThreadDetail(selected);
+        }
       }
       if (!initialDetailApplied && urlParams.get('detail') === 'first' && page.items[0]) {
         initialDetailApplied = true;
@@ -1330,6 +1442,18 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           </div>
         `;
       }).join('')}</div>`;
+    }
+    function selectRow(row) {
+      selectedRecordId = row.record_id || '';
+      selectedThreadKey = '';
+      showDetail(row);
+      syncUrlState();
+    }
+    function selectThread(group) {
+      selectedThreadKey = group.key || '';
+      selectedRecordId = '';
+      showThreadDetail(group);
+      syncUrlState();
     }
     function showDetail(row) {
       const attachment = rowAttachment(row);
@@ -1552,6 +1676,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     callsViewEl.addEventListener('click', () => setView('calls'));
     threadsViewEl.addEventListener('click', () => setView('threads'));
     clearPresetEl.addEventListener('click', clearPreset);
+    copyViewLinkEl.addEventListener('click', copyCurrentViewLink);
+    exportVisibleEl.addEventListener('click', exportCurrentRows);
     refreshDashboardEl.addEventListener('click', () => refreshDashboardData(true));
     loadLimitEl.addEventListener('change', () => {
       currentPage = 1;
@@ -1568,6 +1694,19 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     });
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'visible' && autoRefreshEl.checked) refreshDashboardData(false);
+    });
+    document.addEventListener('keydown', event => {
+      const target = event.target;
+      const inEditable = target && target.closest && target.closest('input, select, textarea, button, [contenteditable="true"]');
+      if (inEditable) return;
+      if (event.key === '/') {
+        event.preventDefault();
+        searchEl.focus();
+        return;
+      }
+      if (event.key === '1') setView('insights');
+      if (event.key === '2') setView('calls');
+      if (event.key === '3') setView('threads');
     });
     window.addEventListener('scroll', updateToTopVisibility, { passive: true });
     toTopEl.addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
@@ -1586,7 +1725,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       const callRow = event.target.closest('.thread-call-row');
       if (!callRow || !rowsEl.contains(callRow)) return;
       const row = rowByRecordId.get(callRow.dataset.recordId);
-      if (row) showDetail(row);
+      if (row) selectRow(row);
     });
     rowsEl.addEventListener('click', event => {
       const callRow = event.target.closest('.thread-call-row');
@@ -1600,7 +1739,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (!callRow || !rowsEl.contains(callRow)) return;
       event.preventDefault();
       const row = rowByRecordId.get(callRow.dataset.recordId);
-      if (row) showDetail(row);
+      if (row) selectRow(row);
     });
     [searchEl, modelEl, effortEl, pricingStatusEl].forEach(el => el.addEventListener('input', () => {
       currentPage = 1;
@@ -1609,6 +1748,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     sortEl.addEventListener('input', () => setSort(sortEl.value, defaultSortDirection(sortEl.value)));
     rebuildDashboardIndexes();
     rebuildFilterOptions();
+    applyInitialState();
     updatePricingSourceLine();
     updateAllowanceSourceLine();
     updateParserDiagnosticsLine();

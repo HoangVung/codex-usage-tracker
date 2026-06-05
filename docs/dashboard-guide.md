@@ -62,6 +62,8 @@ Use `Calls` view when you want to inspect individual model calls.
 - The header stays compact: refresh controls on the right, and short status chips on the left. Exact refresh time, pricing source, and credit-rate source live in hover titles so live refreshes do not reflow the page.
 - The top cards include cached input, uncached input, Codex credit usage, and optional usage remaining instead of estimated-token, unpriced-token, and price-coverage counters.
 - The `Confidence` filter separates exact cost, estimated cost, unpriced cost, exact credit-rate matches, inferred credit mappings, user credit overrides, and missing credit rates.
+- The URL tracks the active view, filters, sort, preset, selected row or thread, page, and expanded threads. `Copy link` copies that state so the same investigation can be reopened.
+- `Export CSV` downloads the currently filtered aggregate calls. In Threads view, it exports the calls behind the filtered thread list rather than only the visible group headers.
 - A `Parser warnings` chip appears only when the latest refresh reports skipped token events, missing expected token fields, invalid counters, duplicate cumulative snapshots, or unknown event shapes. Use `codex-usage-tracker inspect-log <path>` to inspect a suspect log without writing to SQLite.
 - Search matches thread, cwd, model, session id, turn id, subagent role, and parent thread fields.
 - Search also matches derived project names, project-relative cwd values, tags, branch names, and redacted remote labels.
@@ -137,7 +139,9 @@ When served from localhost, the details panel includes `Load context` and `Inclu
 5. Use a preset when the question is already clear: highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
 6. Use `Threads` view to find the active work thread and any spawned subagent calls.
 7. Sort by `Cost`, `Highest Codex credits`, `Tokens`, `Cache`, or `Context` when you need manual comparison.
-8. Click into a row and use `Load context` only when aggregate fields are not enough to explain the call.
+8. Use `Copy link` when you want to return to the same filter/sort/selection state later.
+9. Use `Export CSV` when the current filtered aggregate calls need spreadsheet review.
+10. Click into a row and use `Load context` only when aggregate fields are not enough to explain the call.
 
 ## Investigating Long Chat Growth
 

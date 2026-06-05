@@ -49,6 +49,8 @@ codex-usage-tracker install-plugin --python .venv/bin/python
 ```bash
 python -m pytest
 python -m compileall src
+node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard.js
+node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard_state.js
 python -m build
 python scripts/check_release.py --dist
 git diff --check

@@ -216,6 +216,8 @@ Dashboard behavior:
 - The `Insights` view opens first with ranked attention cards, investigation presets, and top threads by attention score.
 - Top cards include cached input, uncached input, Codex credit usage, and optional usage remaining, replacing the older estimated-token, unpriced-token, and price-coverage cards.
 - The `Confidence` filter separates exact configured cost, estimated cost, unpriced cost, exact credit-rate matches, inferred credit mappings, user credit overrides, and missing credit rates.
+- Filter, sort, active view, active preset, selected row/thread, current page, and expanded threads are reflected in the URL so a copied dashboard link can reopen the same investigation state.
+- `Copy link` copies the current dashboard state. `Export CSV` downloads the currently filtered aggregate calls, including the rows behind a filtered Threads view.
 - The flat `Calls` view is available for inspecting individual model calls.
 - The `Threads` view groups filtered calls by thread, shows the most recently active thread first by default, and lets multiple threads stay expanded.
 - Investigation presets can jump directly to highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
