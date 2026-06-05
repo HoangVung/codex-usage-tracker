@@ -240,6 +240,7 @@ Useful investigations:
 - Filter by model or reasoning effort to compare usage patterns across model choices.
 - Use `summary --preset by-subagent-role` to see whether delegated work is driving a large share of usage.
 - Use `expensive --limit 10` for a quick CLI list of the highest-cost calls.
+- Use `query` when you need stable JSON for automation across project, model, effort, thread, pricing, token, or credit filters.
 
 Show a summary:
 
@@ -255,6 +256,17 @@ codex-usage-tracker summary --preset by-subagent-role
 codex-usage-tracker expensive --limit 10
 codex-usage-tracker pricing-coverage
 ```
+
+Query aggregate rows as JSON:
+
+```bash
+codex-usage-tracker query --since 2026-06-01 --project codex-usage-tracker --min-credits 1
+codex-usage-tracker query --pricing-status unpriced --limit 0
+codex-usage-tracker summary --group-by model --json
+codex-usage-tracker session <session-id> --json
+```
+
+See [`docs/cli-json-schemas.md`](docs/cli-json-schemas.md) for the stable CLI and MCP JSON payload shapes and error codes.
 
 Show one session:
 
@@ -393,6 +405,7 @@ plugin directory.
 - `refresh_usage_index`
 - `usage_doctor`
 - `usage_summary`
+- `usage_query`
 - `session_usage`
 - `usage_call_context`
 - `most_expensive_usage_calls`
@@ -402,6 +415,8 @@ plugin directory.
 - `init_usage_pricing_config`
 - `update_usage_pricing_config`
 - `init_usage_allowance_config`
+
+`usage_summary`, `session_usage`, `most_expensive_usage_calls`, and `usage_pricing_coverage` accept `response_format="json"` when an agent needs stable structured output instead of markdown. `usage_query` always returns JSON.
 
 ## Data Privacy
 

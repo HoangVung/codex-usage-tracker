@@ -148,6 +148,100 @@ def test_rate_card_allowance_and_pricing_snapshot_cli(tmp_path: Path) -> None:
     assert pinned["_source"]["pin_note"].startswith("Use this file")
 
 
+def test_report_json_and_query_cli(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    pricing_path = tmp_path / "pricing.json"
+    allowance_path = tmp_path / "allowance.json"
+    pricing_path.write_text(
+        json.dumps(
+            {
+                "models": {
+                    "gpt-5.5": {
+                        "input_per_million": 2.0,
+                        "cached_input_per_million": 0.5,
+                        "output_per_million": 10.0,
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    refresh = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "refresh",
+        "--codex-home",
+        str(codex_home),
+        "--json",
+    )
+    summary = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "--pricing",
+        str(pricing_path),
+        "summary",
+        "--group-by",
+        "model",
+        "--json",
+    )
+    query = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "--pricing",
+        str(pricing_path),
+        "--allowance",
+        str(allowance_path),
+        "query",
+        "--model",
+        "gpt-5.5",
+        "--min-tokens",
+        "50",
+    )
+    session = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "session",
+        SESSION_ID,
+        "--json",
+    )
+    expensive = _run_cli(
+        tmp_path,
+        "--db",
+        str(db_path),
+        "--pricing",
+        str(pricing_path),
+        "expensive",
+        "--limit",
+        "1",
+        "--json",
+    )
+
+    assert refresh.returncode == 0
+    assert json.loads(refresh.stdout)["schema"] == "codex-usage-tracker-refresh-v1"
+    summary_payload = json.loads(summary.stdout)
+    query_payload = json.loads(query.stdout)
+    session_payload = json.loads(session.stdout)
+    expensive_payload = json.loads(expensive.stdout)
+    assert summary_payload["schema"] == "codex-usage-tracker-summary-v1"
+    assert summary_payload["rows"][0]["group_key"] == "gpt-5.5"
+    assert query_payload["schema"] == "codex-usage-tracker-query-v1"
+    assert query_payload["filters"]["model"] == "gpt-5.5"
+    assert query_payload["row_count"] == 1
+    assert query_payload["rows"][0]["model"] == "gpt-5.5"
+    assert query_payload["rows"][0]["pricing_model"] == "gpt-5.5"
+    assert "SECRET RAW PROMPT" not in query.stdout
+    assert session_payload["schema"] == "codex-usage-tracker-session-v1"
+    assert session_payload["resolved_session_id"] == SESSION_ID
+    assert expensive_payload["schema"] == "codex-usage-tracker-summary-v1"
+    assert expensive_payload["is_expensive"] is True
+
+
 def _run_cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "codex_usage_tracker", *args],

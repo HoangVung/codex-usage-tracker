@@ -23,6 +23,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_DB_PATH,
     DEFAULT_PRICING_PATH,
+    DEFAULT_PROJECTS_PATH,
 )
 from codex_usage_tracker.pricing import (
     update_pricing_from_openai_docs,
@@ -31,6 +32,7 @@ from codex_usage_tracker.pricing import (
 from codex_usage_tracker.reports import (
     build_expensive_calls_report,
     build_pricing_coverage_report,
+    build_query_report,
     build_summary_report,
 )
 from codex_usage_tracker.store import (
@@ -77,24 +79,41 @@ def usage_summary(
     limit: int = 20,
     preset: str | None = None,
     since: str | None = None,
-) -> str:
+    response_format: str = "markdown",
+) -> str | dict[str, Any]:
     """Summarize aggregate Codex token usage by date, model, effort, cwd, thread, session, parent thread, or subagent metadata."""
 
-    return build_summary_report(
+    report = build_summary_report(
         db_path=DEFAULT_DB_PATH,
         pricing_path=DEFAULT_PRICING_PATH,
         group_by=group_by,
         limit=limit,
         preset=preset,
         since=since,
-    ).render()
+    )
+    if response_format == "json":
+        return report.payload()
+    return report.render()
 
 
 @mcp.tool()
-def session_usage(session_id: str | None = None, limit: int = 200) -> str:
+def session_usage(
+    session_id: str | None = None,
+    limit: int = 200,
+    response_format: str = "markdown",
+) -> str | dict[str, Any]:
     """Show aggregate per-call usage for one session, defaulting to the latest indexed session."""
 
     rows = query_session_usage(DEFAULT_DB_PATH, session_id=session_id, limit=limit)
+    if response_format == "json":
+        return {
+            "schema": "codex-usage-tracker-session-v1",
+            "requested_session_id": session_id,
+            "resolved_session_id": rows[0].get("session_id") if rows else session_id,
+            "limit": limit,
+            "row_count": len(rows),
+            "rows": rows,
+        }
     return format_session(rows)
 
 
@@ -129,17 +148,58 @@ def usage_call_context(
 
 @mcp.tool()
 def most_expensive_usage_calls(
-    limit: int = 20, preset: str | None = None, since: str | None = None
-) -> str:
+    limit: int = 20,
+    preset: str | None = None,
+    since: str | None = None,
+    response_format: str = "markdown",
+) -> str | dict[str, Any]:
     """Show the highest last-call aggregate usage rows with efficiency signals."""
 
-    return build_expensive_calls_report(
+    report = build_expensive_calls_report(
         db_path=DEFAULT_DB_PATH,
         pricing_path=DEFAULT_PRICING_PATH,
         limit=limit,
         preset=preset,
         since=since,
-    ).render()
+    )
+    if response_format == "json":
+        return report.payload()
+    return report.render()
+
+
+@mcp.tool()
+def usage_query(
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    project: str | None = None,
+    pricing_status: str | None = None,
+    credit_confidence: str | None = None,
+    min_tokens: int | None = None,
+    min_credits: float | None = None,
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return stable JSON aggregate usage rows with filters for automation."""
+
+    return build_query_report(
+        db_path=DEFAULT_DB_PATH,
+        pricing_path=DEFAULT_PRICING_PATH,
+        allowance_path=DEFAULT_ALLOWANCE_PATH,
+        projects_path=DEFAULT_PROJECTS_PATH,
+        since=since,
+        until=until,
+        model=model,
+        effort=effort,
+        thread=thread,
+        project=project,
+        pricing_status=pricing_status,
+        credit_confidence=credit_confidence,
+        min_tokens=min_tokens,
+        min_credits=min_credits,
+        limit=limit,
+    ).payload
 
 
 @mcp.tool()

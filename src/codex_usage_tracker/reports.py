@@ -7,6 +7,10 @@ from datetime import date, timedelta
 from pathlib import Path
 from typing import Any
 
+from codex_usage_tracker.allowance import (
+    annotate_rows_with_allowance,
+    load_allowance_config,
+)
 from codex_usage_tracker.formatting import (
     format_calls,
     format_pricing_coverage,
@@ -29,6 +33,7 @@ from codex_usage_tracker.store import (
     query_most_expensive_calls,
     query_summary,
 )
+from codex_usage_tracker.threads import annotate_thread_attachments
 
 
 SUMMARY_GROUP_BY_CHOICES = (
@@ -59,6 +64,8 @@ SUMMARY_PRESET_CHOICES = (
     "expensive",
 )
 EXPENSIVE_PRESET_CHOICES = ("today", "last-7-days")
+QUERY_PRICING_STATUS_CHOICES = ("priced", "estimated", "unpriced")
+QUERY_CREDIT_CONFIDENCE_CHOICES = ("exact", "estimated", "unpriced", "user_override")
 
 _SUMMARY_PRESET_GROUPS = {
     "by-model": "model",
@@ -84,6 +91,15 @@ class SummaryReport:
             return format_calls(self.rows)
         return format_summary(self.rows, self.group_by)
 
+    def payload(self) -> dict[str, Any]:
+        return {
+            "schema": "codex-usage-tracker-summary-v1",
+            "group_by": self.group_by,
+            "is_expensive": self.is_expensive,
+            "row_count": len(self.rows),
+            "rows": self.rows,
+        }
+
 
 @dataclass(frozen=True)
 class PricingCoverageReport:
@@ -93,6 +109,13 @@ class PricingCoverageReport:
 
     def render(self, limit: int = 20) -> str:
         return format_pricing_coverage(self.payload, limit=limit)
+
+
+@dataclass(frozen=True)
+class QueryReport:
+    """Stable machine-readable aggregate usage query result."""
+
+    payload: dict[str, Any]
 
 
 def resolve_summary_options(
@@ -195,6 +218,134 @@ def build_pricing_coverage_report(
     config = pricing or load_pricing_config(pricing_path)
     rows = query_summary(db_path, group_by="model", limit=limit, since=since)
     return PricingCoverageReport(summarize_pricing_coverage(rows, pricing=config))
+
+
+def build_query_report(
+    *,
+    db_path: Path,
+    pricing_path: Path,
+    allowance_path: Path,
+    projects_path: Path = DEFAULT_PROJECTS_PATH,
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    project: str | None = None,
+    pricing_status: str | None = None,
+    credit_confidence: str | None = None,
+    min_tokens: int | None = None,
+    min_credits: float | None = None,
+    limit: int = 100,
+) -> QueryReport:
+    """Build a stable JSON usage query with aggregate-only annotated rows."""
+
+    if pricing_status and pricing_status not in QUERY_PRICING_STATUS_CHOICES:
+        raise ValueError(
+            f"pricing_status must be one of: {', '.join(QUERY_PRICING_STATUS_CHOICES)}"
+        )
+    if credit_confidence and credit_confidence not in QUERY_CREDIT_CONFIDENCE_CHOICES:
+        raise ValueError(
+            f"credit_confidence must be one of: {', '.join(QUERY_CREDIT_CONFIDENCE_CHOICES)}"
+        )
+    rows = annotate_thread_attachments(query_dashboard_events(db_path, limit=0, since=since))
+    pricing = load_pricing_config(pricing_path)
+    allowance = load_allowance_config(allowance_path)
+    rows = annotate_rows_with_allowance(annotate_rows_with_efficiency(rows, pricing), allowance)
+    rows = annotate_rows_with_recommendations(rows)
+    rows = annotate_rows_with_project_identity(rows, load_project_config(projects_path))
+    rows = [
+        row
+        for row in rows
+        if _query_row_matches(
+            row,
+            until=until,
+            model=model,
+            effort=effort,
+            thread=thread,
+            project=project,
+            pricing_status=pricing_status,
+            credit_confidence=credit_confidence,
+            min_tokens=min_tokens,
+            min_credits=min_credits,
+        )
+    ]
+    normalized_limit = None if limit <= 0 else limit
+    limited_rows = rows if normalized_limit is None else rows[:normalized_limit]
+    return QueryReport(
+        {
+            "schema": "codex-usage-tracker-query-v1",
+            "filters": {
+                "since": since,
+                "until": until,
+                "model": model,
+                "effort": effort,
+                "thread": thread,
+                "project": project,
+                "pricing_status": pricing_status,
+                "credit_confidence": credit_confidence,
+                "min_tokens": min_tokens,
+                "min_credits": min_credits,
+                "limit": normalized_limit,
+            },
+            "row_count": len(limited_rows),
+            "total_matched_rows": len(rows),
+            "truncated": normalized_limit is not None and len(rows) > normalized_limit,
+            "rows": limited_rows,
+        }
+    )
+
+
+def _query_row_matches(
+    row: dict[str, Any],
+    *,
+    until: str | None,
+    model: str | None,
+    effort: str | None,
+    thread: str | None,
+    project: str | None,
+    pricing_status: str | None,
+    credit_confidence: str | None,
+    min_tokens: int | None,
+    min_credits: float | None,
+) -> bool:
+    if until and str(row.get("event_timestamp") or "") > until:
+        return False
+    if model and str(row.get("model") or "") != model:
+        return False
+    if effort and str(row.get("effort") or "") != effort:
+        return False
+    if thread:
+        thread_values = {
+            str(row.get("thread_name") or ""),
+            str(row.get("parent_thread_name") or ""),
+            str(row.get("resolved_parent_thread_name") or ""),
+            str(row.get("thread_attachment_label") or ""),
+            str(row.get("session_id") or ""),
+        }
+        if thread not in thread_values:
+            return False
+    if project:
+        project_values = {
+            str(row.get("project_name") or ""),
+            str(row.get("project_key") or ""),
+            str(row.get("project_relative_cwd") or ""),
+        }
+        if project not in project_values and project not in (row.get("project_tags") or []):
+            return False
+    if pricing_status == "priced" and not row.get("pricing_model"):
+        return False
+    if pricing_status == "estimated" and not row.get("pricing_estimated"):
+        return False
+    if pricing_status == "unpriced" and row.get("pricing_model"):
+        return False
+    if credit_confidence and row.get("usage_credit_confidence") != credit_confidence:
+        return False
+    if min_tokens is not None and int(row.get("total_tokens") or 0) < min_tokens:
+        return False
+    if min_credits is not None and float(row.get("usage_credits") or 0) < min_credits:
+        return False
+    return True
 
 
 def _project_summary_rows(

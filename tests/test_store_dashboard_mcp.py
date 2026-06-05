@@ -584,20 +584,26 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     dashboard_path = tmp_path / "dashboard.html"
     pricing_path = _write_pricing(tmp_path / "pricing.json")
     allowance_path = tmp_path / "allowance.json"
+    projects_path = tmp_path / "projects.json"
     monkeypatch.setattr(mcp_server, "DEFAULT_CODEX_HOME", codex_home)
     monkeypatch.setattr(mcp_server, "DEFAULT_DB_PATH", db_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_DASHBOARD_PATH", dashboard_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_PRICING_PATH", pricing_path)
     monkeypatch.setattr(mcp_server, "DEFAULT_ALLOWANCE_PATH", allowance_path)
+    monkeypatch.setattr(mcp_server, "DEFAULT_PROJECTS_PATH", projects_path)
     monkeypatch.setattr(mcp_server, "update_pricing_from_openai_docs", _fake_pricing_update)
 
     refresh = mcp_server.refresh_usage_index()
     summary = mcp_server.usage_summary(group_by="thread")
+    summary_json = mcp_server.usage_summary(group_by="model", response_format="json")
     project_summary = mcp_server.usage_summary(group_by="project")
     model_summary = mcp_server.usage_summary(preset="by-model")
     expensive = mcp_server.most_expensive_usage_calls(limit=1)
+    expensive_json = mcp_server.most_expensive_usage_calls(limit=1, response_format="json")
+    query_json = mcp_server.usage_query(model="gpt-5.5", min_tokens=50, limit=2)
     pricing_coverage = mcp_server.usage_pricing_coverage()
     session = mcp_server.session_usage(session_id=SESSION_ID)
+    session_json = mcp_server.session_usage(session_id=SESSION_ID, response_format="json")
     record_id = query_session_usage(db_path=db_path, session_id=SESSION_ID)[0]["record_id"]
     context_disabled = mcp_server.usage_call_context(record_id=record_id)
     monkeypatch.setenv("CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT", "1")
@@ -610,11 +616,20 @@ def test_mcp_wrappers_smoke(tmp_path: Path, monkeypatch) -> None:
     assert refresh["parsed_events"] == 4
     assert refresh["skipped_events"] == 0
     assert "Add Codex token tracking" in summary
+    assert summary_json["schema"] == "codex-usage-tracker-summary-v1"
+    assert summary_json["rows"][0]["group_key"] == "gpt-5.5"
     assert "codex-usage-tracker" in project_summary
     assert "estimated cost" in model_summary
     assert "Most expensive Codex calls" in expensive
+    assert expensive_json["is_expensive"] is True
+    assert query_json["schema"] == "codex-usage-tracker-query-v1"
+    assert query_json["filters"]["model"] == "gpt-5.5"
+    assert query_json["row_count"] == 2
+    assert query_json["rows"][0]["pricing_model"] == "gpt-5.5"
     assert "Codex pricing coverage" in pricing_coverage
     assert SESSION_ID in session
+    assert session_json["resolved_session_id"] == SESSION_ID
+    assert session_json["row_count"] == 2
     assert "Raw context loading through MCP is disabled" in context_disabled
     assert "SECRET RAW PROMPT" not in context_disabled
     assert "SECRET RAW PROMPT" in context
