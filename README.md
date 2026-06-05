@@ -116,6 +116,7 @@ codex-usage-tracker serve-dashboard --open
 
 ```bash
 codex-usage-tracker update-pricing
+codex-usage-tracker update-rate-card
 codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
@@ -124,7 +125,7 @@ Then:
 
 1. Leave `Live` enabled while working, or click `Refresh` after a Codex run finishes.
 2. Start in `Insights` view and scan the `Needs Attention` cards.
-3. Optionally run `codex-usage-tracker init-allowance` and copy current remaining usage from Codex Usage or `/status` into `~/.codex-usage-tracker/allowance.json`.
+3. Optionally run `codex-usage-tracker parse-allowance "5h 79% 6:50 PM Weekly 33% Jun 7"` with values copied from Codex Usage or `/status`.
 4. Use an investigation preset when you already know the question: highest-cost threads, highest-credit calls, context bloat, cache misses, pricing gaps, or estimated-price review.
 5. Open `Threads` view to find the active work thread and any spawned subagent or auto-review calls.
 6. Expand an expensive or high-credit thread and read calls oldest to newest.
@@ -214,6 +215,7 @@ Dashboard behavior:
 
 - The `Insights` view opens first with ranked attention cards, investigation presets, and top threads by attention score.
 - Top cards include cached input, uncached input, Codex credit usage, and optional usage remaining, replacing the older estimated-token, unpriced-token, and price-coverage cards.
+- The `Confidence` filter separates exact configured cost, estimated cost, unpriced cost, exact credit-rate matches, inferred credit mappings, user credit overrides, and missing credit rates.
 - The flat `Calls` view is available for inspecting individual model calls.
 - The `Threads` view groups filtered calls by thread, shows the most recently active thread first by default, and lets multiple threads stay expanded.
 - Investigation presets can jump directly to highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
@@ -281,6 +283,13 @@ This fetches OpenAI text-token pricing from `https://developers.openai.com/api/d
 
 The updater also includes marked best-guess estimates for Codex labels that are not finalized in the public pricing table. `codex-auto-review` uses OpenAI's published `codex-mini-latest` Codex pricing from `https://openai.com/index/introducing-codex/`: `$1.50` per 1M input tokens, a 75% prompt-cache discount (`$0.375` per 1M cached input tokens), and `$6.00` per 1M output tokens. `gpt-5.3-codex-spark` is listed by OpenAI as a research preview with non-final Codex rates, so the tracker estimates it as `gpt-5.3-codex` at `$1.75` per 1M input tokens, `$0.175` per 1M cached input tokens, and `$14.00` per 1M output tokens. Use `--no-estimates` when you want only pricing rows parsed from the OpenAI pricing table.
 
+For reproducible historical reports, pin the current pricing cache and pass the pinned file later:
+
+```bash
+codex-usage-tracker pin-pricing --output ~/.codex-usage-tracker/pricing-2026-06-05.json
+codex-usage-tracker dashboard --pricing ~/.codex-usage-tracker/pricing-2026-06-05.json
+```
+
 For a manual template instead:
 
 ```bash
@@ -293,9 +302,10 @@ Enable optional allowance context:
 
 ```bash
 codex-usage-tracker init-allowance
+codex-usage-tracker parse-allowance "5h 79% 6:50 PM Weekly 33% Jun 7"
 ```
 
-Edit `~/.codex-usage-tracker/allowance.json` with the 5-hour and weekly remaining values you see in Codex Settings > Usage, the Codex Usage dashboard, or `/status` during an active CLI session. The tracker can store `remaining_percent`, `reset_at`, `remaining_credits`, and `total_credits` for each window. If `total_credits` is present, call and thread details show the estimated share of that allowance; otherwise the dashboard shows the copied remaining percentages and reset context.
+Edit `~/.codex-usage-tracker/allowance.json` with the 5-hour and weekly remaining values you see in Codex Settings > Usage, the Codex Usage dashboard, or `/status` during an active CLI session, or use `parse-allowance` to update those windows from pasted text. The tracker can store `remaining_percent`, `reset_at`, `remaining_credits`, and `total_credits` for each window. If `total_credits` is present, call and thread details show the estimated share of that allowance; otherwise the dashboard shows the copied remaining percentages and reset context.
 
 Enable optional recommendation threshold overrides:
 
@@ -313,7 +323,15 @@ codex-usage-tracker init-projects
 
 Edit `~/.codex-usage-tracker/projects.json` to map stable project hashes, repo roots, or project names to friendlier aliases, ignored paths, and tags. The tracker derives project identity from `cwd` and local Git metadata when available: repo root, repo name, current branch, and a hashed remote origin. It does not store or display the full remote URL.
 
-Credit usage estimates are calculated from Codex's aggregate input, cached-input, and output token counters using the bundled OpenAI Codex rate-card snapshot from `https://help.openai.com/en/articles/20001106-codex-rate-card` and `https://developers.openai.com/codex/pricing`. Direct model matches are marked exact. Local aliases and inferred labels, such as code-review usage mapped to GPT-5.3-Codex, are marked estimated. Normal reports do not contact the network for allowance or credit estimates.
+Credit usage estimates are calculated from Codex's aggregate input, cached-input, and output token counters using the bundled OpenAI Codex rate-card snapshot from `https://help.openai.com/en/articles/20001106-codex-rate-card` and `https://developers.openai.com/codex/pricing`. Direct model matches are marked exact. Local aliases and inferred labels, such as code-review usage mapped to GPT-5.3-Codex, are marked estimated. Local `credit_rates` overrides are marked `user_override`. Normal reports do not contact the network for allowance or credit estimates.
+
+To copy the bundled source-stamped rate card into a local snapshot, run:
+
+```bash
+codex-usage-tracker update-rate-card
+```
+
+The local snapshot is written to `~/.codex-usage-tracker/rate-card.json`. Each bundled rate and alias includes source URL, fetched date, tier, confidence, and alias rationale where applicable. Use `--source-file` only when you have a reviewed replacement JSON snapshot you want the tracker to validate and use.
 
 ### Usage And Allowance Accuracy
 
@@ -323,8 +341,8 @@ Credit usage estimates are calculated from Codex's aggregate input, cached-input
 
 To configure the usage component:
 
-1. Run `codex-usage-tracker init-allowance`.
-2. Open `~/.codex-usage-tracker/allowance.json`.
+1. Run `codex-usage-tracker parse-allowance "5h 79% 6:50 PM Weekly 33% Jun 7"` with your current copied values.
+2. Or run `codex-usage-tracker init-allowance` and open `~/.codex-usage-tracker/allowance.json`.
 3. Copy the current `remaining_percent` and `reset_at` values from Codex Settings > Usage, the Codex Usage dashboard, or `/status`.
 4. Add `remaining_credits` and `total_credits` only if your plan or workspace exposes exact credit numbers.
 5. Leave fields as `null` when you do not have a trustworthy value; the dashboard will still show credits used, but it will not pretend to know remaining allowance.
@@ -334,6 +352,7 @@ To configure the usage component:
 - This is a sidecar dashboard and plugin, not a native Codex chat overlay. Native hover tooltips inside Codex chat would require a transcript UI extension point that is not part of this v1 surface.
 - Token counts come from Codex's logged counters. The tracker does not re-tokenize prompts or reconstruct usage from raw text.
 - Pricing is optional and local. Rows are unpriced when no matching model rate is configured, and some Codex-specific labels may use marked best-guess estimates.
+- Pricing can change after a report is generated. Use `pin-pricing` and pass the pinned file with `--pricing` when you need reproducible historical cost estimates.
 - Remaining 5-hour and weekly allowance is not read automatically from Codex or inferred from the logged-in account plan. Add `~/.codex-usage-tracker/allowance.json` when you want the dashboard to show your current copied allowance state.
 - Local Codex logs may not include usage from other ChatGPT agentic surfaces that share the same allowance.
 - Parent-child thread relationships are only as good as the metadata Codex logs. Explicit parent session ids are preferred; inferred auto-review attachments are labeled as inferred.
@@ -410,7 +429,9 @@ python -m build
 python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
+codex-usage-tracker update-rate-card --output /tmp/codex-usage-rate-card.json
 codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
+codex-usage-tracker parse-allowance --output /tmp/codex-usage-allowance.json "5h 79% 6:50 PM Weekly 33% Jun 7"
 codex-usage-tracker doctor
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help

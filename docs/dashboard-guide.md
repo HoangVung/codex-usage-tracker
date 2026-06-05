@@ -11,6 +11,7 @@ For the best experience, run the localhost dashboard server:
 ```bash
 codex-usage-tracker setup
 codex-usage-tracker update-pricing
+codex-usage-tracker update-rate-card
 codex-usage-tracker serve-dashboard --open
 ```
 
@@ -18,6 +19,7 @@ For optional allowance context, initialize a local template and copy values from
 
 ```bash
 codex-usage-tracker init-allowance
+codex-usage-tracker parse-allowance "5h 79% 6:50 PM Weekly 33% Jun 7"
 ```
 
 To tune review thresholds locally, run `codex-usage-tracker init-thresholds` and edit `~/.codex-usage-tracker/thresholds.json`. These thresholds control low-cache, high-context, high-uncached-input, large-thread, reasoning-spike, low-output, and high-cost recommendations.
@@ -59,6 +61,7 @@ Use `Calls` view when you want to inspect individual model calls.
 
 - The header stays compact: refresh controls on the right, and short status chips on the left. Exact refresh time, pricing source, and credit-rate source live in hover titles so live refreshes do not reflow the page.
 - The top cards include cached input, uncached input, Codex credit usage, and optional usage remaining instead of estimated-token, unpriced-token, and price-coverage counters.
+- The `Confidence` filter separates exact cost, estimated cost, unpriced cost, exact credit-rate matches, inferred credit mappings, user credit overrides, and missing credit rates.
 - A `Parser warnings` chip appears only when the latest refresh reports skipped token events, missing expected token fields, invalid counters, duplicate cumulative snapshots, or unknown event shapes. Use `codex-usage-tracker inspect-log <path>` to inspect a suspect log without writing to SQLite.
 - Search matches thread, cwd, model, session id, turn id, subagent role, and parent thread fields.
 - Search also matches derived project names, project-relative cwd values, tags, branch names, and redacted remote labels.
@@ -79,7 +82,7 @@ Useful interpretation notes:
 - `Session cumulative` is the running total Codex logged for that session at the time of that call.
 - `Cached input` and `Uncached input` are split so cache behavior is visible without storing transcript text.
 - A cost with `*` means the pricing row is marked as a best-guess estimate.
-- Codex credits are estimated from aggregate input, cached-input, and output token counters. Direct model matches use the bundled OpenAI Codex rate-card snapshot; inferred labels are marked estimated.
+- Codex credits are estimated from aggregate input, cached-input, and output token counters. Direct model matches use the bundled OpenAI Codex rate-card snapshot; inferred labels are marked estimated, and local credit-rate overrides are marked user-provided.
 - `Usage Remaining` is not read from the logged-in account plan. Configure `~/.codex-usage-tracker/allowance.json` with values copied from Codex Settings > Usage, the Codex Usage dashboard, or `/status` when you want current remaining allowance context.
 
 ## Threads View
@@ -95,7 +98,7 @@ Use `Threads` view when you want to understand a work session as a group instead
 - Expanded calls are ordered oldest to newest by event timestamp, then cumulative token count.
 - Subagents with logged parent session ids are shown under the parent thread. Auto-review sessions without explicit parent ids may be attached by cwd and nearby activity and are marked as attached or inferred in the details.
 
-The same filters, pricing status, load limit, cards, and sort controls apply in `Insights`, `Calls`, and `Threads` views.
+The same filters, confidence status, load limit, cards, and sort controls apply in `Insights`, `Calls`, and `Threads` views.
 
 ## Details And Context
 
@@ -107,7 +110,7 @@ For selected calls, the panel shows:
 
 - primary cost, Codex credits, allowance impact, cache, uncached input, context use, pricing status, and next action
 - thread attachment, source, parent-thread, and timestamp narrative
-- input, cached input, uncached input, output, reasoning output, cumulative tokens, pricing fields, and credit model
+- input, cached input, uncached input, output, reasoning output, cumulative tokens, pricing fields, credit model, credit confidence, and rate-card source metadata
 - collapsed raw aggregate identifiers
 - collapsed source JSONL file and line metadata
 
@@ -129,7 +132,7 @@ When served from localhost, the details panel includes `Load context` and `Inclu
 
 1. Start with `serve-dashboard --open`.
 2. Use `Refresh` after a Codex run finishes, or leave `Live` enabled while you work.
-3. Optionally run `init-allowance` and copy current remaining usage from Codex Usage or `/status`.
+3. Optionally run `parse-allowance` with copied values from Codex Usage or `/status`, or initialize and edit `allowance.json` manually.
 4. Start in `Insights` view and review the highest-severity attention cards.
 5. Use a preset when the question is already clear: highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
 6. Use `Threads` view to find the active work thread and any spawned subagent calls.
@@ -165,3 +168,5 @@ It does not include:
 The screenshots in this guide are produced from synthetic fixture data used by the test suite.
 
 Remaining 5-hour and weekly allowance is not read from Codex logs or inferred from the logged-in account plan automatically. Add `~/.codex-usage-tracker/allowance.json` only when you want the dashboard to show current copied allowance state. Local Codex logs may also omit usage from other ChatGPT agentic surfaces that share the same allowance.
+
+Pricing and Codex credit estimates are source-stamped local calculations. Use `codex-usage-tracker pin-pricing --output <path>` when a report needs to keep the same USD pricing snapshot over time, and use `codex-usage-tracker update-rate-card` when you want an explicit local copy of the bundled Codex credit rate-card snapshot.

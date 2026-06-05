@@ -222,6 +222,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "session cumulative" in dashboard_js.lower()
     assert "Estimated Cost" in dashboard
     assert "estimated_cost_usd" in dashboard
+    assert "pricing_snapshot" in dashboard
+    assert "rates_fingerprint" in dashboard
     assert "Uncached Input" in dashboard
     assert "uncachedTokens" in dashboard
     assert "Codex Credits" in dashboard
@@ -288,6 +290,7 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "scrollbar-gutter: stable" in dashboard_css
     assert "overflow-y: scroll" in dashboard_css
     assert "formatTimestamp(pricingSource.fetched_at)" in dashboard_js
+    assert "pricingSnapshotWarning" in dashboard_js
     assert "formatTimestamp(nextPayload.refreshed_at)" in dashboard_js
     assert "threadModelSummary" in dashboard_js
     assert "model-pill" in dashboard_surface
@@ -311,6 +314,28 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert 'data-sort-key="thread"' in dashboard
     assert '<option value="attention" selected>Needs attention</option>' in dashboard
     assert '<option value="usage">Highest Codex credits</option>' in dashboard
+
+    pricing_path.write_text(
+        json.dumps(
+            {
+                "_source": {
+                    "name": "Synthetic pricing",
+                    "fetched_at": "2026-06-05T12:00:00Z",
+                },
+                "models": {
+                    "gpt-5.5": {
+                        "input_per_million": 3.0,
+                        "cached_input_per_million": 0.75,
+                        "output_per_million": 12.0,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    generate_dashboard(db_path=db_path, output_path=dashboard_path, pricing_path=pricing_path)
+    updated_dashboard = dashboard_path.read_text(encoding="utf-8")
+    assert "Pricing snapshot changed since the previous dashboard render" in updated_dashboard
 
 
 def test_dashboard_guide_link_can_use_docs_url_override(tmp_path: Path, monkeypatch) -> None:

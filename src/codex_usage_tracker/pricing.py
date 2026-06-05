@@ -14,6 +14,7 @@ from codex_usage_tracker.pricing_config import (
     PRICING_TEMPLATE,
     PricingConfig,
     load_pricing_config,
+    pin_pricing_snapshot,
     write_pricing_template,
 )
 from codex_usage_tracker.pricing_estimates import (
@@ -49,6 +50,7 @@ __all__ = [
     "estimate_cost_usd",
     "load_pricing_config",
     "parse_openai_pricing_markdown",
+    "pin_pricing_snapshot",
     "summarize_pricing_coverage",
     "update_pricing_from_openai_docs",
     "write_pricing_template",

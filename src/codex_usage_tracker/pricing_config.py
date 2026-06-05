@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -98,6 +99,40 @@ def write_pricing_template(path: Path = DEFAULT_PRICING_PATH, force: bool = Fals
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(PRICING_TEMPLATE, indent=2) + "\n", encoding="utf-8")
     return path
+
+
+def pin_pricing_snapshot(
+    *,
+    source_path: Path = DEFAULT_PRICING_PATH,
+    output_path: Path,
+    force: bool = False,
+) -> Path:
+    """Copy the current local pricing config to a reproducible report snapshot."""
+
+    config = load_pricing_config(source_path)
+    if config.error:
+        raise ValueError(f"pricing config is invalid: {config.error}")
+    if not config.loaded:
+        raise FileNotFoundError(f"pricing config does not exist: {source_path}")
+    output_path = output_path.expanduser()
+    if output_path.exists() and not force:
+        raise FileExistsError(f"pricing snapshot already exists: {output_path}")
+    raw = json.loads(source_path.expanduser().read_text(encoding="utf-8"))
+    if not isinstance(raw, dict):
+        raise ValueError("pricing config must be a JSON object")
+    source = raw.get("_source") if isinstance(raw.get("_source"), dict) else {}
+    raw["_source"] = {
+        **source,
+        "pinned": True,
+        "pinned_at": datetime.now(timezone.utc)
+        .replace(microsecond=0)
+        .isoformat()
+        .replace("+00:00", "Z"),
+        "pin_note": "Use this file with --pricing for reproducible historical reports.",
+    }
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    output_path.write_text(json.dumps(raw, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return output_path
 
 
 def parse_models(raw: object) -> dict[str, dict[str, float]]:

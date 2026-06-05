@@ -6,6 +6,7 @@ import html
 import hashlib
 import json
 import os
+import re
 import shutil
 from importlib import resources
 from pathlib import Path
@@ -21,6 +22,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_PRICING_PATH,
     DEFAULT_PROJECTS_PATH,
+    DEFAULT_RATE_CARD_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
@@ -42,6 +44,7 @@ def dashboard_payload(
     limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
     since: str | None = None,
     api_token: str | None = None,
     context_api_enabled: bool = False,
@@ -54,7 +57,7 @@ def dashboard_payload(
         query_dashboard_events(db_path=db_path, limit=limit, since=since)
     )
     pricing = load_pricing_config(pricing_path)
-    allowance = load_allowance_config(allowance_path)
+    allowance = load_allowance_config(allowance_path, rate_card_path=rate_card_path)
     thresholds = load_threshold_config(thresholds_path)
     projects = load_project_config(projects_path)
     annotated_rows = annotate_rows_with_allowance(
@@ -75,10 +78,13 @@ def dashboard_payload(
         "rows": annotated_rows,
         "pricing_configured": pricing.loaded and not pricing.error,
         "pricing_source": pricing.source,
+        "pricing_snapshot": _pricing_snapshot(pricing.loaded, pricing.source, pricing.models),
         "allowance_configured": allowance.loaded and not allowance.error,
         "allowance_source": allowance_summary["source"],
         "allowance_windows": allowance_summary["windows"],
         "allowance_error": allowance_summary["error"],
+        "rate_card_configured": allowance_summary["rate_card_loaded"],
+        "rate_card_error": allowance_summary["rate_card_error"],
         "loaded_row_count": len(rows),
         "total_available_rows": query_dashboard_event_count(db_path=db_path, since=since),
         "limit": normalized_limit,
@@ -101,6 +107,7 @@ def generate_dashboard(
     limit: int | None = 5000,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
     since: str | None = None,
     api_token: str | None = None,
     context_api_enabled: bool = False,
@@ -112,20 +119,23 @@ def generate_dashboard(
     asset_base = _dashboard_assets_href(output_path)
     stylesheet_href = _versioned_asset_href(output_path, asset_base, "dashboard.css")
     script_src = _versioned_asset_href(output_path, asset_base, "dashboard.js")
-    payload = json.dumps(
-        dashboard_payload(
-            db_path=db_path,
-            limit=limit,
-            pricing_path=pricing_path,
-            allowance_path=allowance_path,
-            since=since,
-            api_token=api_token,
-            context_api_enabled=context_api_enabled,
-            thresholds_path=thresholds_path,
-            projects_path=projects_path,
-        ),
-        ensure_ascii=True,
-    ).replace("</", "<\\/")
+    previous_payload = _previous_dashboard_payload(output_path)
+    payload_dict = dashboard_payload(
+        db_path=db_path,
+        limit=limit,
+        pricing_path=pricing_path,
+        allowance_path=allowance_path,
+        rate_card_path=rate_card_path,
+        since=since,
+        api_token=api_token,
+        context_api_enabled=context_api_enabled,
+        thresholds_path=thresholds_path,
+        projects_path=projects_path,
+    )
+    payload_dict["pricing_snapshot_warning"] = _pricing_snapshot_warning(
+        previous_payload, payload_dict
+    )
+    payload = json.dumps(payload_dict, ensure_ascii=True).replace("</", "<\\/")
     output_path.write_text(
         _html(
             payload,
@@ -142,6 +152,85 @@ def _normalize_limit(limit: int | None) -> int | None:
     if limit is None or limit <= 0:
         return None
     return int(limit)
+
+
+def _pricing_snapshot(
+    loaded: bool,
+    source: dict[str, Any] | None,
+    models: dict[str, dict[str, float]],
+) -> dict[str, Any]:
+    if not loaded:
+        return {"configured": False, "fingerprint": None}
+    public_source = {
+        key: value
+        for key, value in (source or {}).items()
+        if key
+        in {
+            "name",
+            "url",
+            "tier",
+            "fetched_at",
+            "model_count",
+            "official_model_count",
+            "estimated_model_count",
+            "pinned",
+            "pinned_at",
+        }
+    }
+    public_source.setdefault("model_count", len(models))
+    rates_fingerprint = hashlib.sha256(
+        json.dumps(models, sort_keys=True, ensure_ascii=True).encode("utf-8")
+    ).hexdigest()[:12]
+    fingerprint = hashlib.sha256(
+        json.dumps(
+            {**public_source, "rates_fingerprint": rates_fingerprint},
+            sort_keys=True,
+            ensure_ascii=True,
+        ).encode("utf-8")
+    ).hexdigest()[:12]
+    return {
+        "configured": True,
+        "fingerprint": fingerprint,
+        "rates_fingerprint": rates_fingerprint,
+        **public_source,
+    }
+
+
+def _pricing_snapshot_warning(
+    previous_payload: dict[str, Any] | None, current_payload: dict[str, object]
+) -> str | None:
+    if not previous_payload:
+        return None
+    previous = previous_payload.get("pricing_snapshot")
+    current = current_payload.get("pricing_snapshot")
+    if not isinstance(previous, dict) or not isinstance(current, dict):
+        return None
+    previous_fingerprint = previous.get("fingerprint")
+    current_fingerprint = current.get("fingerprint")
+    if not previous_fingerprint or not current_fingerprint:
+        return None
+    if previous_fingerprint == current_fingerprint:
+        return None
+    previous_label = previous.get("fetched_at") or previous.get("pinned_at") or previous_fingerprint
+    current_label = current.get("fetched_at") or current.get("pinned_at") or current_fingerprint
+    return f"Pricing snapshot changed since the previous dashboard render: {previous_label} -> {current_label}."
+
+
+def _previous_dashboard_payload(output_path: Path) -> dict[str, Any] | None:
+    if not output_path.exists():
+        return None
+    try:
+        text = output_path.read_text(encoding="utf-8")
+    except OSError:
+        return None
+    match = _USAGE_DATA_RE.search(text)
+    if not match:
+        return None
+    try:
+        raw = json.loads(match.group("payload"))
+    except json.JSONDecodeError:
+        return None
+    return raw if isinstance(raw, dict) else None
 
 
 def _dashboard_guide_href(output_path: Path) -> str | None:
@@ -219,3 +308,9 @@ def _safe_int(value: object) -> int:
         return int(str(value))
     except (TypeError, ValueError):
         return 0
+
+
+_USAGE_DATA_RE = re.compile(
+    r'<script id="usage-data" type="application/json">(?P<payload>.*?)</script>',
+    re.DOTALL,
+)

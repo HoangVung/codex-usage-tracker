@@ -24,6 +24,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_PRICING_PATH,
     DEFAULT_PROJECTS_PATH,
+    DEFAULT_RATE_CARD_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.store import refresh_usage_index
@@ -34,6 +35,7 @@ def serve_dashboard(
     output_path: Path = DEFAULT_DASHBOARD_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
     limit: int = 5000,
     since: str | None = None,
     host: str = "127.0.0.1",
@@ -58,6 +60,7 @@ def serve_dashboard(
         limit=limit,
         pricing_path=pricing_path,
         allowance_path=allowance_path,
+        rate_card_path=rate_card_path,
         since=since,
         api_token=api_token,
         context_api_enabled=context_api_enabled,
@@ -70,6 +73,7 @@ def serve_dashboard(
         db_path=db_path,
         pricing_path=pricing_path,
         allowance_path=allowance_path,
+        rate_card_path=rate_card_path,
         thresholds_path=thresholds_path,
         projects_path=projects_path,
         limit=limit,
@@ -116,11 +120,13 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         api_token: str,
         context_api_enabled: bool,
         refresh_lock: threading.Lock,
+        rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
         **kwargs: object,
     ) -> None:
         self._db_path = db_path
         self._pricing_path = pricing_path
         self._allowance_path = allowance_path
+        self._rate_card_path = rate_card_path
         self._thresholds_path = thresholds_path
         self._projects_path = projects_path
         self._limit = limit
@@ -242,6 +248,7 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
                 limit=limit,
                 pricing_path=self._pricing_path,
                 allowance_path=self._allowance_path,
+                rate_card_path=self._rate_card_path,
                 thresholds_path=self._thresholds_path,
                 projects_path=self._projects_path,
                 since=self._since,

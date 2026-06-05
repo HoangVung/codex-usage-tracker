@@ -3,10 +3,12 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     let data = payloadRows(initialPayload);
     let pricingConfigured = Boolean(initialPayload.pricing_configured);
     let pricingSource = initialPayload.pricing_source || {};
+    let pricingSnapshotWarning = initialPayload.pricing_snapshot_warning || '';
     let allowanceConfigured = Boolean(initialPayload.allowance_configured);
     let allowanceSource = initialPayload.allowance_source || {};
     let allowanceWindows = Array.isArray(initialPayload.allowance_windows) ? initialPayload.allowance_windows : [];
     let allowanceError = initialPayload.allowance_error || '';
+    let rateCardError = initialPayload.rate_card_error || '';
     let parserDiagnostics = initialPayload.parser_diagnostics || {};
     let apiToken = initialPayload.api_token || '';
     let contextApiEnabled = Boolean(initialPayload.context_api_enabled);
@@ -283,6 +285,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (usageCreditValue(row) === null) return 'No mapped Codex credit rate';
       if (row.usage_credit_confidence === 'exact') return 'Official rate-card match';
       if (row.usage_credit_confidence === 'estimated') return 'Inferred model mapping';
+      if (row.usage_credit_confidence === 'user_override') return 'User-provided credit rate';
       return short(row.usage_credit_confidence, 'Configured rate');
     }
     function usageCreditsWithStatus(row) {
@@ -362,6 +365,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         allowanceWindows.length ? `Allowance windows: ${allowanceWindows.map(window => short(window.label || window.key)).join(', ')}` : 'Run codex-usage-tracker init-allowance to add remaining usage windows.',
         allowanceWindows.some(window => window.reset_at) ? `Resets: ${allowanceWindows.map(window => window.reset_at ? `${short(window.label || window.key)} ${formatTimestamp(window.reset_at, window.reset_at)}` : '').filter(Boolean).join('; ')}` : '',
         allowanceError ? `Allowance config error: ${allowanceError}` : '',
+        rateCardError ? `Rate-card error: ${rateCardError}` : '',
       ].filter(Boolean).join(' ');
     }
     function rebuildSelectOptions(select, values, label) {
@@ -391,16 +395,17 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           pricingSource.name || 'Pricing source',
           pricingSource.tier ? `${pricingSource.tier} tier` : '',
           pricingSource.fetched_at ? `fetched ${formatTimestamp(pricingSource.fetched_at)}` : '',
+          pricingSource.pinned ? 'pinned snapshot' : '',
         ].filter(Boolean);
         sourceEl.textContent = 'Costs';
         sourceEl.dataset.state = 'ready';
         sourceEl.title = pricingSource.fetched_at
-          ? `${sourceParts.join(' · ')}. Fetched from ${pricingSource.url} at ${formatTimestampTitle(pricingSource.fetched_at)}. Internal Codex labels may use marked best-guess estimates.`
-          : `${sourceParts.join(' · ')}. Internal Codex labels may use marked best-guess estimates.`;
+          ? `${sourceParts.join(' · ')}. Fetched from ${pricingSource.url} at ${formatTimestampTitle(pricingSource.fetched_at)}. Internal Codex labels may use marked best-guess estimates.${pricingSnapshotWarning ? ` ${pricingSnapshotWarning}` : ''}`
+          : `${sourceParts.join(' · ')}. Internal Codex labels may use marked best-guess estimates.${pricingSnapshotWarning ? ` ${pricingSnapshotWarning}` : ''}`;
       } else {
         sourceEl.textContent = pricingConfigured ? 'Costs' : 'No costs';
         sourceEl.dataset.state = pricingConfigured ? 'ready' : 'missing';
-        sourceEl.title = pricingConfigured ? '' : 'Run codex-usage-tracker update-pricing to configure estimated costs.';
+        sourceEl.title = pricingConfigured ? (pricingSnapshotWarning || '') : 'Run codex-usage-tracker update-pricing to configure estimated costs.';
       }
     }
     function updateParserDiagnosticsLine() {
@@ -447,7 +452,11 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         const statusMatches = !pricingStatus
           || (pricingStatus === 'official' && row.pricing_model && !row.pricing_estimated)
           || (pricingStatus === 'estimated' && row.pricing_estimated)
-          || (pricingStatus === 'unpriced' && !row.pricing_model);
+          || (pricingStatus === 'unpriced' && !row.pricing_model)
+          || (pricingStatus === 'credit-exact' && row.usage_credit_confidence === 'exact')
+          || (pricingStatus === 'credit-estimated' && row.usage_credit_confidence === 'estimated')
+          || (pricingStatus === 'credit-override' && row.usage_credit_confidence === 'user_override')
+          || (pricingStatus === 'credit-missing' && row.usage_credit_confidence === 'unpriced');
         return (!term || haystack.includes(term)) && (!model || row.model === model) && (!effort || row.effort === effort) && statusMatches && presetMatchesRow(row);
       });
       rows.sort(compareCalls);
@@ -1365,6 +1374,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
               ['Session cumulative', number.format(row.cumulative_total_tokens || 0)],
               ['Pricing model', row.pricing_model || 'No configured price'],
               ['Credit model', row.usage_credit_model || 'No mapped rate'],
+              ['Credit confidence', usageCreditStatusText(row)],
+              ['Credit source', row.usage_credit_source || 'None'],
+              ['Credit source fetched', row.usage_credit_fetched_at || 'Unknown'],
+              ['Credit tier', row.usage_credit_tier || 'Unknown'],
               ['Cache savings', money(row.estimated_cache_savings_usd)],
               ['Efficiency signals', flags],
             ])}
@@ -1465,10 +1478,12 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       data = payloadRows(nextPayload);
       pricingConfigured = Boolean(nextPayload.pricing_configured);
       pricingSource = nextPayload.pricing_source || {};
+      pricingSnapshotWarning = nextPayload.pricing_snapshot_warning || '';
       allowanceConfigured = Boolean(nextPayload.allowance_configured);
       allowanceSource = nextPayload.allowance_source || {};
       allowanceWindows = Array.isArray(nextPayload.allowance_windows) ? nextPayload.allowance_windows : [];
       allowanceError = nextPayload.allowance_error || '';
+      rateCardError = nextPayload.rate_card_error || '';
       parserDiagnostics = nextPayload.parser_diagnostics || {};
       apiToken = nextPayload.api_token || apiToken;
       contextApiEnabled = Boolean(nextPayload.context_api_enabled);

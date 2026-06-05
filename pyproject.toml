@@ -60,6 +60,7 @@ where = ["src"]
   "dashboard/*",
   "docs/*",
   "docs/assets/*",
+  "rate_cards/*",
   "skills/codex-usage-tracker/*",
 ]
 

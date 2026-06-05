@@ -7,5 +7,6 @@ recursive-include scripts *.py
 recursive-include src/codex_usage_tracker/plugin_data/assets *
 recursive-include src/codex_usage_tracker/plugin_data/dashboard *
 recursive-include src/codex_usage_tracker/plugin_data/docs *
+recursive-include src/codex_usage_tracker/plugin_data/rate_cards *
 recursive-include src/codex_usage_tracker/plugin_data/skills *
 recursive-include tests *.py

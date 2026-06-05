@@ -9,7 +9,11 @@ import webbrowser
 from pathlib import Path
 
 from codex_usage_tracker import __version__
-from codex_usage_tracker.allowance import write_allowance_template
+from codex_usage_tracker.allowance import (
+    update_rate_card,
+    write_allowance_from_text,
+    write_allowance_template,
+)
 from codex_usage_tracker.context import DEFAULT_CONTEXT_CHARS, load_call_context
 from codex_usage_tracker.dashboard import generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
@@ -26,6 +30,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_PLUGIN_LINK,
     DEFAULT_PRICING_PATH,
     DEFAULT_PROJECTS_PATH,
+    DEFAULT_RATE_CARD_PATH,
     DEFAULT_SUPPORT_BUNDLE_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
@@ -35,6 +40,7 @@ from codex_usage_tracker.projects import write_project_template
 from codex_usage_tracker.pricing import (
     OPENAI_PRICING_MD_URL,
     VALID_PRICING_TIERS,
+    pin_pricing_snapshot,
     update_pricing_from_openai_docs,
     write_pricing_template,
 )
@@ -84,6 +90,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     parser.add_argument("--allowance", type=Path, default=DEFAULT_ALLOWANCE_PATH)
+    parser.add_argument("--rate-card", type=Path, default=DEFAULT_RATE_CARD_PATH)
     parser.add_argument("--thresholds", type=Path, default=DEFAULT_THRESHOLDS_PATH)
     parser.add_argument("--projects", type=Path, default=DEFAULT_PROJECTS_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -105,6 +112,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_export_parser(subparsers)
     _add_pricing_parsers(subparsers)
     _add_allowance_parser(subparsers)
+    _add_rate_card_parser(subparsers)
     _add_threshold_parser(subparsers)
     _add_project_parser(subparsers)
     _add_support_bundle_parser(subparsers)
@@ -384,6 +392,13 @@ def _add_pricing_parsers(
         help="Skip estimated prices for internal Codex model labels.",
     )
 
+    pin_pricing = subparsers.add_parser(
+        "pin-pricing",
+        help="Copy the current local pricing config to a reproducible report snapshot",
+    )
+    pin_pricing.add_argument("--output", type=Path, required=True)
+    pin_pricing.add_argument("--force", action="store_true")
+
 
 def _add_allowance_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
@@ -394,6 +409,38 @@ def _add_allowance_parser(
     )
     allowance.add_argument("--output", type=Path, default=None)
     allowance.add_argument("--force", action="store_true")
+
+    parse_allowance = subparsers.add_parser(
+        "parse-allowance",
+        help="Update allowance windows from pasted Codex /status or usage text",
+    )
+    parse_allowance.add_argument(
+        "text",
+        nargs="*",
+        help="Pasted usage text. Reads stdin when omitted.",
+    )
+    parse_allowance.add_argument("--output", type=Path, default=None)
+    parse_allowance.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an invalid existing allowance config.",
+    )
+
+
+def _add_rate_card_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    rate_card = subparsers.add_parser(
+        "update-rate-card",
+        help="Write the bundled or supplied Codex credit rate-card snapshot locally",
+    )
+    rate_card.add_argument("--output", type=Path, default=None)
+    rate_card.add_argument(
+        "--source-file",
+        type=Path,
+        default=None,
+        help="Validate and copy this JSON rate-card snapshot instead of the bundled one.",
+    )
 
 
 def _add_threshold_parser(
@@ -654,6 +701,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
         limit=args.limit,
         pricing_path=args.pricing,
         allowance_path=args.allowance,
+        rate_card_path=args.rate_card,
         since=args.since,
         thresholds_path=args.thresholds,
         projects_path=args.projects,
@@ -673,6 +721,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
         limit=args.limit,
         pricing_path=args.pricing,
         allowance_path=args.allowance,
+        rate_card_path=args.rate_card,
         since=args.since,
         thresholds_path=args.thresholds,
         projects_path=args.projects,
@@ -694,6 +743,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
         output_path=args.output,
         pricing_path=args.pricing,
         allowance_path=args.allowance,
+        rate_card_path=args.rate_card,
         limit=args.limit,
         since=args.since,
         host=args.host,
@@ -765,9 +815,49 @@ def _run_update_pricing(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_pin_pricing(args: argparse.Namespace) -> int:
+    output = pin_pricing_snapshot(
+        source_path=args.pricing,
+        output_path=args.output,
+        force=args.force,
+    )
+    print(f"Pinned pricing snapshot to {output}")
+    print("Use this file with --pricing for reproducible historical reports.")
+    return 0
+
+
 def _run_init_allowance(args: argparse.Namespace) -> int:
     output = write_allowance_template(args.output or args.allowance, force=args.force)
     print(f"Wrote allowance template to {output}")
+    return 0
+
+
+def _run_parse_allowance(args: argparse.Namespace) -> int:
+    text = " ".join(args.text).strip()
+    if not text:
+        if sys.stdin.isatty():
+            raise ValueError("provide pasted usage text or pipe it on stdin")
+        text = sys.stdin.read().strip()
+    output = write_allowance_from_text(
+        text,
+        path=args.output or args.allowance,
+        force=args.force,
+    )
+    print(f"Updated allowance windows from pasted usage text at {output}")
+    return 0
+
+
+def _run_update_rate_card(args: argparse.Namespace) -> int:
+    result = update_rate_card(
+        args.output or args.rate_card,
+        source_file=args.source_file,
+    )
+    print(
+        f"Wrote {result.model_count} Codex credit rates and {result.alias_count} aliases "
+        f"to {result.path}"
+        + (f" from {result.source_url}" if result.source_url else "")
+        + (f" (backup: {result.backup_path})" if result.backup_path else "")
+    )
     return 0
 
 
@@ -790,6 +880,7 @@ def _run_support_bundle(args: argparse.Namespace) -> int:
         db_path=args.db,
         pricing_path=args.pricing,
         allowance_path=args.allowance,
+        rate_card_path=args.rate_card,
         thresholds_path=args.thresholds,
         projects_path=args.projects,
     )
@@ -819,7 +910,10 @@ _COMMAND_HANDLERS = {
     "export": _run_export,
     "init-pricing": _run_init_pricing,
     "update-pricing": _run_update_pricing,
+    "pin-pricing": _run_pin_pricing,
     "init-allowance": _run_init_allowance,
+    "parse-allowance": _run_parse_allowance,
+    "update-rate-card": _run_update_rate_card,
     "init-thresholds": _run_init_thresholds,
     "init-projects": _run_init_projects,
     "support-bundle": _run_support_bundle,

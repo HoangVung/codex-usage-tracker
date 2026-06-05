@@ -53,11 +53,13 @@ python -m build
 python scripts/check_release.py --dist
 git diff --check
 codex-usage-tracker update-pricing --output /tmp/codex-usage-pricing.json
+codex-usage-tracker update-rate-card --output /tmp/codex-usage-rate-card.json
 codex-usage-tracker doctor
 codex-usage-tracker doctor --suggest-repair
 codex-usage-tracker dashboard --output /tmp/codex-usage-dashboard.html
 codex-usage-tracker serve-dashboard --help
 codex-usage-tracker init-allowance --output /tmp/codex-usage-allowance.json
+codex-usage-tracker parse-allowance --output /tmp/codex-usage-allowance.json "5h 79% 6:50 PM Weekly 33% Jun 7"
 codex-usage-tracker init-thresholds --output /tmp/codex-usage-thresholds.json
 codex-usage-tracker init-projects --output /tmp/codex-usage-projects.json
 codex-usage-tracker support-bundle --output /tmp/codex-usage-support.json

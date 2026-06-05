@@ -18,6 +18,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_DB_PATH,
     DEFAULT_PRICING_PATH,
     DEFAULT_PROJECTS_PATH,
+    DEFAULT_RATE_CARD_PATH,
     DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.pricing import load_pricing_config
@@ -33,6 +34,7 @@ def build_support_bundle(
     db_path: Path = DEFAULT_DB_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
     thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
     projects_path: Path = DEFAULT_PROJECTS_PATH,
 ) -> Path:
@@ -45,6 +47,7 @@ def build_support_bundle(
         db_path=db_path,
         pricing_path=pricing_path,
         allowance_path=allowance_path,
+        rate_card_path=rate_card_path,
         thresholds_path=thresholds_path,
         projects_path=projects_path,
     )
@@ -58,13 +61,14 @@ def support_bundle_payload(
     db_path: Path = DEFAULT_DB_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    rate_card_path: Path = DEFAULT_RATE_CARD_PATH,
     thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
     projects_path: Path = DEFAULT_PROJECTS_PATH,
 ) -> dict[str, Any]:
     """Return support diagnostics safe to attach to a GitHub issue."""
 
     pricing = load_pricing_config(pricing_path)
-    allowance = load_allowance_config(allowance_path)
+    allowance = load_allowance_config(allowance_path, rate_card_path=rate_card_path)
     thresholds = load_threshold_config(thresholds_path)
     projects = load_project_config(projects_path)
     return {
@@ -91,6 +95,7 @@ def support_bundle_payload(
             "db_path": str(db_path.expanduser()),
             "pricing_path": str(pricing_path.expanduser()),
             "allowance_path": str(allowance_path.expanduser()),
+            "rate_card_path": str(rate_card_path.expanduser()),
             "thresholds_path": str(thresholds_path.expanduser()),
             "projects_path": str(projects_path.expanduser()),
         },
@@ -107,6 +112,10 @@ def support_bundle_payload(
             "error": allowance.error,
             "window_count": len(allowance.windows),
             "source": allowance.source,
+            "rate_card_loaded": allowance.rate_card_loaded,
+            "rate_card_error": allowance.rate_card_error,
+            "credit_rate_count": len(allowance.credit_rates),
+            "alias_count": len(allowance.aliases),
         },
         "thresholds": {
             "loaded": thresholds.loaded,

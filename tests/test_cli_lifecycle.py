@@ -85,6 +85,69 @@ def test_setup_support_bundle_and_reset_db_cli(tmp_path: Path) -> None:
     assert "Raw Codex logs were not touched" in reset.stdout
 
 
+def test_rate_card_allowance_and_pricing_snapshot_cli(tmp_path: Path) -> None:
+    rate_card_path = tmp_path / "rate-card.json"
+    allowance_path = tmp_path / "allowance.json"
+    pricing_path = tmp_path / "pricing.json"
+    pinned_pricing_path = tmp_path / "pricing-pinned.json"
+    pricing_path.write_text(
+        json.dumps(
+            {
+                "_source": {"name": "Synthetic pricing", "fetched_at": "2026-06-05T12:00:00Z"},
+                "models": {
+                    "gpt-5.5": {
+                        "input_per_million": 1,
+                        "cached_input_per_million": 0.1,
+                        "output_per_million": 2,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    update_rate_card = _run_cli(
+        tmp_path,
+        "--rate-card",
+        str(rate_card_path),
+        "update-rate-card",
+    )
+    parse_allowance = _run_cli(
+        tmp_path,
+        "--allowance",
+        str(allowance_path),
+        "parse-allowance",
+        "5h",
+        "79%",
+        "6:50 PM",
+        "Weekly",
+        "33%",
+        "Jun 7",
+    )
+    pin_pricing = _run_cli(
+        tmp_path,
+        "--pricing",
+        str(pricing_path),
+        "pin-pricing",
+        "--output",
+        str(pinned_pricing_path),
+    )
+
+    assert update_rate_card.returncode == 0
+    assert "Codex credit rates" in update_rate_card.stdout
+    assert json.loads(rate_card_path.read_text(encoding="utf-8"))["schema"] == (
+        "codex-usage-tracker-codex-rate-card-v1"
+    )
+    assert parse_allowance.returncode == 0
+    allowance = json.loads(allowance_path.read_text(encoding="utf-8"))
+    assert allowance["windows"][0]["remaining_percent"] == 0.79
+    assert allowance["windows"][1]["remaining_percent"] == 0.33
+    assert pin_pricing.returncode == 0
+    pinned = json.loads(pinned_pricing_path.read_text(encoding="utf-8"))
+    assert pinned["_source"]["pinned"] is True
+    assert pinned["_source"]["pin_note"].startswith("Use this file")
+
+
 def _run_cli(tmp_path: Path, *args: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, "-m", "codex_usage_tracker", *args],
