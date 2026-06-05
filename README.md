@@ -407,10 +407,35 @@ plugin startup.
 
 ## Codex Skills
 
-The plugin installs two companion skills:
+The plugin installs two companion skills. They are local instruction files that
+help Codex use this package; they do not create another hosted service or send
+usage data outside the machine.
 
-- `codex-usage-tracker` for operating the tracker, refreshing data, generating dashboards, exporting CSV, and using MCP tools directly.
-- `codex-usage-api` for conversational usage analysis. It guides Codex to refresh aggregate data, call the JSON API/MCP tools, compare threads/projects/models, and explain pricing, credit, cache, context, and allowance limitations without exposing raw transcript content.
+- `codex-usage-tracker` is the operational skill for setup and direct tracker work: refresh data, generate or serve dashboards, export CSV, run doctor checks, and use MCP tools directly.
+- `codex-usage-api` is the conversational analyst skill. Use it when you want Codex to answer questions from tracker data, compare threads/projects/models, explain cache and context behavior, or discuss pricing, Codex credit, and allowance limitations.
+
+Good prompts for the API companion skill:
+
+```text
+Use my Codex Usage Tracker data to explain what drove usage this week.
+Which threads used the most Codex credits and why?
+Find low-cache or high-context calls from today and suggest what to inspect next.
+Compare usage by project for the last 7 days.
+Show me what is estimated or unpriced before I trust the cost numbers.
+```
+
+The API skill should use aggregate JSON first: refresh the local index, call
+`usage_summary`, `usage_query`, `session_usage`,
+`most_expensive_usage_calls`, or `usage_pricing_coverage`, then explain the
+answer with the data scope and any estimate caveats. If MCP tools are not
+available, the same questions can be answered through the CLI JSON commands
+documented in [`docs/cli-json-schemas.md`](docs/cli-json-schemas.md).
+
+The companion skill cannot read your logged-in Codex account plan, native
+remaining allowance, or usage from other agentic surfaces. Remaining allowance
+context is only as accurate as the values you manually copy into
+`~/.codex-usage-tracker/allowance.json`. Raw logged context is separate from
+normal analysis and should only be loaded when you explicitly ask for it.
 
 ## MCP Tools
 

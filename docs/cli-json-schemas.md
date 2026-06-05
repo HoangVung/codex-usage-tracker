@@ -2,6 +2,21 @@
 
 Codex Usage Tracker exposes aggregate-only JSON for automation through CLI `--json` flags and MCP tools. These payloads do not include prompts, assistant messages, tool output, or raw transcript snippets.
 
+## Companion Skill Usage
+
+The installed `codex-usage-api` skill is the recommended conversational entrypoint when a user wants to discuss usage instead of manually choosing commands. It should refresh aggregate data first, prefer JSON MCP tools, and fall back to these CLI JSON surfaces when MCP tools are unavailable.
+
+| Question | Preferred JSON surface |
+| --- | --- |
+| What used the most? | `most_expensive_usage_calls(response_format="json")`, then `usage_summary(group_by="thread", response_format="json")` |
+| Which project, thread, or model is driving usage? | `usage_summary(group_by="project" \| "thread" \| "model", response_format="json")` |
+| Why did usage spike? | `usage_query(...)` with `since`, `project`, `thread`, `model`, `effort`, `min_tokens`, or `min_credits` filters |
+| What is estimated or unpriced? | `usage_pricing_coverage(response_format="json")`, `usage_query(pricing_status="unpriced")`, or `usage_query(credit_confidence="estimated")` |
+| How does this affect my allowance? | `usage_query(...)` rows with `usage_credits`, `usage_credit_confidence`, and allowance annotations |
+| What happened in one session? | `session_usage(session_id=..., response_format="json")` |
+
+The skill should separate exact facts from estimates. Remaining allowance is not native account data; it is only copied local state from `~/.codex-usage-tracker/allowance.json` when configured.
+
 ## Shared Error Codes
 
 CLI failures print a stable code in stderr:

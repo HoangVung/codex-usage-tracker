@@ -14,6 +14,9 @@ Codex Usage Tracker is a local sidecar app. It reads aggregate token counters fr
 - `dashboard.py` builds aggregate-only dashboard payloads and writes HTML/assets. `server.py` adds localhost refresh and explicit lazy context loading.
 - `context.py` is the only normal path that reads raw log context, and it does so only for one selected record on demand with redaction and size limits.
 - `plugin_installer.py`, `.mcp.json`, `skills/`, and `scripts/check_release.py` own install and packaging behavior.
+- `skills/codex-usage-tracker/` is the source copy for the operational Codex skill. It should stay focused on setup, dashboard, export, doctor, and direct MCP workflows.
+- `skills/codex-usage-api/` is the source copy for the conversational analyst skill. It should stay focused on aggregate-only API routing, interpretation, and limitations.
+- `src/codex_usage_tracker/plugin_data/skills/` contains the wheel-bundled copies installed by `codex-usage-tracker install-plugin`.
 
 ## Extension Rules
 
@@ -22,6 +25,7 @@ Codex Usage Tracker is a local sidecar app. It reads aggregate token counters fr
 3. Add new machine-readable outputs through `api_payloads.py` or report payload methods with a `schema` value and focused tests.
 4. Add dashboard-only interactions in `plugin_data/dashboard/dashboard.js` and keep URL state in `dashboard_state.js`.
 5. Keep all examples, screenshots, mocks, and tests synthetic. Never derive fixtures from real logs.
+6. When editing skill instructions, update both the source `skills/...` file and the bundled `src/codex_usage_tracker/plugin_data/skills/...` copy. `scripts/check_release.py` verifies that installable plugin assets stay complete and synced.
 
 ## Validation
 
