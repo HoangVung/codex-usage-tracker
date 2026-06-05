@@ -310,9 +310,18 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     dashboard = dashboard_path.read_text(encoding="utf-8")
     asset_dir = tmp_path / "codex-usage-tracker-assets"
     dashboard_js = (asset_dir / "dashboard.js").read_text(encoding="utf-8")
+    dashboard_format_js = (asset_dir / "dashboard_format.js").read_text(encoding="utf-8")
+    dashboard_data_js = (asset_dir / "dashboard_data.js").read_text(encoding="utf-8")
     dashboard_state_js = (asset_dir / "dashboard_state.js").read_text(encoding="utf-8")
     dashboard_css = (asset_dir / "dashboard.css").read_text(encoding="utf-8")
-    dashboard_surface = "\n".join([dashboard, dashboard_js, dashboard_state_js, dashboard_css])
+    dashboard_surface = "\n".join([
+        dashboard,
+        dashboard_format_js,
+        dashboard_data_js,
+        dashboard_js,
+        dashboard_state_js,
+        dashboard_css,
+    ])
     csv_text = csv_path.read_text(encoding="utf-8")
     assert exported == 4
     assert exported_with_zero_limit == 4
@@ -321,8 +330,12 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "SECRET RAW PROMPT" not in dashboard_css
     assert "SECRET RAW PROMPT" not in csv_text
     assert 'href="codex-usage-tracker-assets/dashboard.css?v=' in dashboard
+    assert 'src="codex-usage-tracker-assets/dashboard_format.js?v=' in dashboard
+    assert 'src="codex-usage-tracker-assets/dashboard_data.js?v=' in dashboard
     assert 'src="codex-usage-tracker-assets/dashboard_state.js?v=' in dashboard
     assert 'src="codex-usage-tracker-assets/dashboard.js?v=' in dashboard
+    assert "CodexUsageDashboardFormat" in dashboard_format_js
+    assert "CodexUsageDashboardData" in dashboard_data_js
     assert "CodexUsageDashboardState" in dashboard_state_js
     assert "copyViewLink" in dashboard
     assert "exportVisible" in dashboard
@@ -387,7 +400,7 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "parent_thread_name" in dashboard
     assert "thread_attachment_label" in dashboard
     assert "thread_attachment_relation" in dashboard
-    assert "explicit parent thread" in dashboard_js
+    assert "explicit parent thread" in dashboard_surface
     assert "spawned from" in dashboard_js
     assert "spawned threads" in dashboard_js
     assert "Aggregate only" not in dashboard
@@ -398,6 +411,8 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert (tmp_path / "codex-usage-tracker-guide" / "dashboard-guide.html").exists()
     assert (tmp_path / "codex-usage-tracker-guide" / "assets" / "dashboard-calls.png").exists()
     assert (asset_dir / "dashboard.js").exists()
+    assert (asset_dir / "dashboard_format.js").exists()
+    assert (asset_dir / "dashboard_data.js").exists()
     assert (asset_dir / "dashboard_state.js").exists()
     assert (asset_dir / "dashboard.css").exists()
     assert "detail-section" in dashboard

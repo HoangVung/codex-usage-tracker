@@ -38,6 +38,8 @@ jobs:
       - name: Dashboard JavaScript syntax
         if: matrix.python-version == '3.13'
         run: |
+          node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard_format.js
+          node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard_data.js
           node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard.js
           node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard_state.js
       - name: Release readiness

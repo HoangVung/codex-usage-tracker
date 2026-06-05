@@ -1,4 +1,42 @@
-const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
+    const dashboardFormat = window.CodexUsageDashboardFormat;
+    const dashboardData = window.CodexUsageDashboardData;
+    const {
+      number,
+      money,
+      credits,
+      pct,
+      short,
+      escapeHtml,
+      truncate,
+      formatTimestamp,
+      formatTimestampTitle,
+      renderTimeCell,
+      defaultSortDirection,
+      textValue,
+      compareValues,
+      sortLabel,
+    } = dashboardFormat;
+    const {
+      payloadRows,
+      payloadLimit,
+      limitValue,
+      optionValueExists,
+      clamp,
+      usageCreditValue,
+      usageCreditStatusText,
+      sumUsageCredits,
+      creditCoverageRatio,
+      isAutoReview,
+      isSubagent,
+      sourceLabel,
+      resolvedParentThreadName,
+      resolvedParentSessionUpdatedAt,
+      resolveThreadAttachment,
+      chronological,
+      compactListSummary,
+      threadModelSummary,
+    } = dashboardData;
+    const initialPayload = JSON.parse(document.getElementById('usage-data').textContent);
     const stateManager = window.CodexUsageDashboardState;
     const urlParams = new URLSearchParams(window.location.search);
     const initialState = stateManager ? stateManager.read(urlParams) : {};
@@ -47,18 +85,6 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     const pageStatusEl = document.getElementById('pageStatus');
     const pagerEl = document.getElementById('pager');
     const toTopEl = document.getElementById('toTop');
-    const number = new Intl.NumberFormat();
-    const tableDateFormat = new Intl.DateTimeFormat([], { month: 'short', day: 'numeric', year: 'numeric' });
-    const tableTimeFormat = new Intl.DateTimeFormat([], { hour: 'numeric', minute: '2-digit', second: '2-digit' });
-    const detailDateTimeFormat = new Intl.DateTimeFormat([], {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-      second: '2-digit',
-      timeZoneName: 'short',
-    });
     let rowByRecordId = new Map();
     let threadAttachmentByRecordId = new Map();
     const expandedThreads = new Set();
@@ -140,89 +166,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         matches: row => Number(row.usage_credits || 0) > 0,
       },
     ];
-    const money = (value, missingLabel = 'No price') => {
-      if (value === null || value === undefined) return missingLabel;
-      const amount = Number(value) || 0;
-      if (amount > 0 && amount < 0.01) return `$${amount.toFixed(4)}`;
-      return `$${amount.toFixed(2)}`;
-    };
-    const credits = (value, missingLabel = 'No rate') => {
-      if (value === null || value === undefined) return missingLabel;
-      const amount = Number(value) || 0;
-      if (amount > 0 && amount < 1) return amount.toFixed(2);
-      if (amount < 100) return amount.toFixed(1);
-      return number.format(Math.round(amount));
-    };
-    const pct = value => `${((Number(value) || 0) * 100).toFixed(1)}%`;
-    const short = (value, fallback = 'Unknown') => value || fallback;
-    const escapeHtml = value => String(value).replace(/[&<>"']/g, char => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    }[char]));
-    const truncate = (value, size = 54) => {
-      const text = short(value, '');
-      return text.length > size ? `${text.slice(0, size - 1)}…` : text;
-    };
-    function parsedTimestamp(value) {
-      if (!value) return null;
-      const date = new Date(value);
-      return Number.isNaN(date.getTime()) ? null : date;
-    }
-    function formatTimestamp(value, fallback = 'Unknown') {
-      const date = parsedTimestamp(value);
-      return date ? detailDateTimeFormat.format(date) : short(value, fallback);
-    }
-    function formatTimestampTitle(value) {
-      const formatted = formatTimestamp(value, '');
-      return [formatted, value].filter(Boolean).join(' - ');
-    }
-    function renderTimeCell(value) {
-      const date = parsedTimestamp(value);
-      if (!date) return escapeHtml(truncate(value, 20));
-      return `
-        <span class="time-cell" title="${escapeHtml(formatTimestampTitle(value))}">
-          <span class="time-date">${escapeHtml(tableDateFormat.format(date))}</span>
-          <span class="time-clock">${escapeHtml(tableTimeFormat.format(date))}</span>
-        </span>
-      `;
-    }
-    function defaultSortDirection(key) {
-      return {
-        cache: 'asc',
-        effort: 'asc',
-        model: 'asc',
-        thread: 'asc',
-      }[key] || 'desc';
-    }
-    function textValue(value) {
-      return short(value, '').toLowerCase();
-    }
-    function compareValues(left, right) {
-      if (typeof left === 'number' || typeof right === 'number') {
-        return (Number(left) || 0) - (Number(right) || 0);
-      }
-      return String(left || '').localeCompare(String(right || ''));
-    }
     function directional(compareResult) {
       return sortDirection === 'asc' ? compareResult : -compareResult;
-    }
-    function sortLabel(key) {
-      return {
-        attention: 'Needs attention',
-        cache: 'Cache',
-        context: 'Context use',
-        cost: 'Cost',
-        effort: 'Effort',
-        model: 'Model',
-        signals: 'Signals',
-        thread: 'Thread',
-        time: 'Time',
-        total: 'Tokens',
-        usage: 'Codex credits',
-      }[key] || 'Sort';
     }
     function setSort(key, direction = null) {
       sortKey = key;
@@ -254,17 +199,6 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       });
       tableCaptionEl.dataset.sortDescription = `${sortLabel(sortKey)} ${sortDirection === 'asc' ? 'ascending' : 'descending'}`;
     }
-    function payloadRows(nextPayload) {
-      return Array.isArray(nextPayload) ? nextPayload : Array.isArray(nextPayload.rows) ? nextPayload.rows : [];
-    }
-    function payloadLimit(nextPayload) {
-      if (!nextPayload || nextPayload.limit === null || nextPayload.limit === undefined) return null;
-      const parsed = Number(nextPayload.limit);
-      return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-    }
-    function limitValue(limit) {
-      return limit === null || limit === undefined ? 'all' : String(limit);
-    }
     function loadedRowsDescription() {
       const loaded = number.format(data.length);
       const available = number.format(totalAvailableRows || data.length);
@@ -282,23 +216,9 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       }
       loadLimitEl.value = value;
     }
-    function optionValueExists(select, value) {
-      if (!value) return false;
-      return Array.from(select.options || []).some(option => option.value === value);
-    }
     function rebuildDashboardIndexes() {
       rowByRecordId = new Map(data.map(row => [row.record_id, row]));
       threadAttachmentByRecordId = new Map(data.map(row => [row.record_id, resolveThreadAttachment(row)]));
-    }
-    function usageCreditValue(row) {
-      return row.usage_credits === null || row.usage_credits === undefined ? null : Number(row.usage_credits || 0);
-    }
-    function usageCreditStatusText(row) {
-      if (usageCreditValue(row) === null) return 'No mapped Codex credit rate';
-      if (row.usage_credit_confidence === 'exact') return 'Official rate-card match';
-      if (row.usage_credit_confidence === 'estimated') return 'Inferred model mapping';
-      if (row.usage_credit_confidence === 'user_override') return 'User-provided credit rate';
-      return short(row.usage_credit_confidence, 'Configured rate');
     }
     function usageCreditsWithStatus(row) {
       const value = usageCreditValue(row);
@@ -307,17 +227,6 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     function costUsageCell(costText, creditValue) {
       const usage = creditValue === null || creditValue === undefined ? 'No credit rate' : `${credits(creditValue)} cr`;
       return `<span class="metric-stack"><span>${escapeHtml(costText)}</span><span class="metric-sub">${escapeHtml(usage)}</span></span>`;
-    }
-    function sumUsageCredits(rows) {
-      return rows.reduce((sum, row) => {
-        const value = usageCreditValue(row);
-        return value === null ? sum : sum + value;
-      }, 0);
-    }
-    function creditCoverageRatio(rows) {
-      const totalTokens = rows.reduce((sum, row) => sum + Number(row.total_tokens || 0), 0);
-      const ratedTokens = rows.reduce((sum, row) => sum + (usageCreditValue(row) === null ? 0 : Number(row.total_tokens || 0)), 0);
-      return totalTokens ? ratedTokens / totalTokens : 0;
     }
     function allowanceWindowText(totalCredits, mode = 'impact') {
       if (!allowanceWindows.length) return '';
@@ -606,9 +515,6 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       currentPage = 1;
       render();
     }
-    function clamp(value, min, max) {
-      return Math.min(Math.max(value, min), max);
-    }
     function threshold(key, fallback) {
       const value = Number(actionThresholds[key]);
       return Number.isFinite(value) ? value : fallback;
@@ -669,71 +575,11 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (timeFallback !== 0) return timeFallback;
       return String(a.record_id || '').localeCompare(String(b.record_id || ''));
     }
-    function isAutoReview(row) {
-      return row.model === 'codex-auto-review' || row.subagent_type === 'guardian';
-    }
-    function isSubagent(row) {
-      return row.thread_source === 'subagent' || Boolean(row.subagent_type || row.parent_session_id);
-    }
-    function sourceLabel(row) {
-      if (isAutoReview(row)) return 'Auto-review';
-      if (row.subagent_type === 'thread_spawn') {
-        return row.agent_role ? `Subagent: ${row.agent_role}` : 'Subagent';
-      }
-      if (isSubagent(row)) return 'Subagent';
-      return 'User';
-    }
-    function resolvedParentThreadName(row) {
-      return row.resolved_parent_thread_name || row.parent_thread_name || '';
-    }
-    function resolvedParentSessionUpdatedAt(row) {
-      return row.resolved_parent_session_updated_at || row.parent_session_updated_at || '';
-    }
-    function resolveThreadAttachment(row) {
-      if (row.thread_attachment_key && row.thread_attachment_label) {
-        return {
-          key: row.thread_attachment_key,
-          label: row.thread_attachment_label,
-          relation: row.thread_attachment_relation || 'session',
-          parentSessionId: row.thread_attachment_parent_session_id || row.parent_session_id || null,
-        };
-      }
-      if (row.thread_name) {
-        return { key: `thread:${row.thread_name}`, label: row.thread_name, relation: 'direct' };
-      }
-      const parentThreadName = resolvedParentThreadName(row);
-      if (row.parent_session_id && parentThreadName) {
-        return {
-          key: `thread:${parentThreadName}`,
-          label: parentThreadName,
-          relation: 'explicit parent thread',
-          parentSessionId: row.parent_session_id,
-        };
-      }
-      if (row.parent_session_id) {
-        return {
-          key: `session:${row.parent_session_id}`,
-          label: `Parent ${row.parent_session_id}`,
-          relation: 'explicit parent',
-          parentSessionId: row.parent_session_id,
-        };
-      }
-      return {
-        key: `session:${row.session_id || 'unknown'}`,
-        label: row.session_id || 'Unknown thread',
-        relation: isSubagent(row) ? 'unmatched subagent' : 'session',
-      };
-    }
     function rowAttachment(row) {
       return threadAttachmentByRecordId.get(row.record_id) || resolveThreadAttachment(row);
     }
     function rowThreadLabel(row) {
       return rowAttachment(row).label;
-    }
-    function chronological(a, b) {
-      const timeCompare = String(a.event_timestamp || '').localeCompare(String(b.event_timestamp || ''));
-      if (timeCompare !== 0) return timeCompare;
-      return Number(a.cumulative_total_tokens || 0) - Number(b.cumulative_total_tokens || 0);
     }
     function sortThreads(groups) {
       groups.sort(compareThreads);
@@ -768,20 +614,6 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         if (relationshipCompare !== 0) return relationshipCompare;
       }
       return compareThreads(a, b);
-    }
-    function compactListSummary(values, fallback = 'Mixed') {
-      const unique = [...new Set(values.filter(Boolean))].sort();
-      if (!unique.length) return 'Unknown';
-      if (unique.length === 1) return unique[0];
-      return `${unique[0]} +${unique.length - 1} ${fallback.toLowerCase()}`;
-    }
-    function threadModelSummary(calls) {
-      const models = [...new Set(calls.map(row => row.model).filter(Boolean))].sort();
-      if (!models.length) return 'Unknown';
-      if (models.length === 1) return models[0];
-      const nonReviewModels = models.filter(model => model !== 'codex-auto-review');
-      const primary = nonReviewModels.length ? nonReviewModels[0] : models[0];
-      return `${primary} +${models.length - 1} models`;
     }
     function fitModelPills() {
       document.querySelectorAll('.model-pill').forEach(pill => {

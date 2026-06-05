@@ -48,6 +48,8 @@ REQUIRED_FILES = [
     "skills/codex-usage-tracker/scripts/run_mcp.py",
     "src/codex_usage_tracker/plugin_data/assets/icon.svg",
     "src/codex_usage_tracker/plugin_data/dashboard/dashboard.css",
+    "src/codex_usage_tracker/plugin_data/dashboard/dashboard_format.js",
+    "src/codex_usage_tracker/plugin_data/dashboard/dashboard_data.js",
     "src/codex_usage_tracker/plugin_data/dashboard/dashboard.js",
     "src/codex_usage_tracker/plugin_data/dashboard/dashboard_state.js",
     "src/codex_usage_tracker/plugin_data/dashboard/dashboard_template.html",
@@ -63,6 +65,8 @@ REQUIRED_FILES = [
 WHEEL_REQUIRED_MEMBERS = {
     "codex_usage_tracker/plugin_data/assets/icon.svg",
     "codex_usage_tracker/plugin_data/dashboard/dashboard.css",
+    "codex_usage_tracker/plugin_data/dashboard/dashboard_format.js",
+    "codex_usage_tracker/plugin_data/dashboard/dashboard_data.js",
     "codex_usage_tracker/plugin_data/dashboard/dashboard.js",
     "codex_usage_tracker/plugin_data/dashboard/dashboard_state.js",
     "codex_usage_tracker/plugin_data/dashboard/dashboard_template.html",

@@ -12,6 +12,7 @@ Codex Usage Tracker is a local sidecar app. It reads aggregate token counters fr
 - `costing.py`, `pricing_config.py`, `pricing_openai.py`, `pricing_estimates.py`, and `allowance.py` own cost, credit, rate-card, and allowance annotation. Keep estimate confidence and source metadata attached to rows.
 - `projects.py`, `threads.py`, and `recommendations.py` annotate aggregate rows with project identity, thread relationships, and actionable signals. Project privacy redaction also belongs in `projects.py` so CLI, MCP, dashboard, CSV, and support-bundle surfaces share the same behavior.
 - `dashboard.py` builds aggregate-only dashboard payloads and writes HTML/assets. `server.py` adds localhost refresh and explicit lazy context loading.
+- `plugin_data/dashboard/dashboard_format.js` owns dashboard formatting primitives. `dashboard_data.js` owns row payload and thread relationship helpers. `dashboard_state.js` owns URL, CSV, and download state utilities. `dashboard.js` owns DOM rendering, event handling, API refresh, and detail-panel behavior.
 - `context.py` is the only normal path that reads raw log context, and it does so only for one selected record on demand with redaction and size limits.
 - `plugin_installer.py`, `.mcp.json`, `skills/`, and `scripts/check_release.py` own install and packaging behavior.
 - `skills/codex-usage-tracker/` is the source copy for the operational Codex skill. It should stay focused on setup, dashboard, export, doctor, and direct MCP workflows.
