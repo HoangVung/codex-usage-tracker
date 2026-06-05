@@ -273,7 +273,18 @@ def build_query_report(
         raise ValueError(
             f"credit_confidence must be one of: {', '.join(QUERY_CREDIT_CONFIDENCE_CHOICES)}"
         )
-    rows = annotate_thread_attachments(query_dashboard_events(db_path, limit=0, since=since))
+    rows = annotate_thread_attachments(
+        query_dashboard_events(
+            db_path,
+            limit=0,
+            since=since,
+            until=until,
+            model=model,
+            effort=effort,
+            thread=thread,
+            min_tokens=min_tokens,
+        )
+    )
     pricing = load_pricing_config(pricing_path)
     allowance = load_allowance_config(allowance_path)
     rows = annotate_rows_with_allowance(annotate_rows_with_efficiency(rows, pricing), allowance)

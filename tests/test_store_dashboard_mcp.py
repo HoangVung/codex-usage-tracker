@@ -12,6 +12,7 @@ from pathlib import Path
 from codex_usage_tracker.context import load_call_context
 from codex_usage_tracker.dashboard import dashboard_payload, generate_dashboard
 from codex_usage_tracker.diagnostics import run_doctor
+from codex_usage_tracker.models import UsageEvent
 from codex_usage_tracker.pricing import (
     PricingUpdateResult,
     annotate_rows_with_efficiency,
@@ -31,6 +32,7 @@ from codex_usage_tracker.store import (
     query_summary,
     refresh_metadata,
     refresh_usage_index,
+    upsert_usage_events,
 )
 
 SESSION_ID = "019e374d-c19f-7da3-a44f-8de043a7a64e"
@@ -172,6 +174,8 @@ def test_init_db_repairs_version_zero_schema(tmp_path: Path) -> None:
 
     assert {"thread_source", "parent_thread_name", "parent_session_updated_at"} <= columns
     assert "idx_usage_timestamp" in indexes
+    assert "idx_usage_parent_thread" in indexes
+    assert "idx_usage_total_tokens" in indexes
     assert user_version == 2
     assert [row["version"] for row in migrations] == [1, 2]
 
@@ -190,6 +194,103 @@ def test_rebuild_index_clears_aggregate_rows_before_rescan(tmp_path: Path) -> No
     assert result.parsed_events == 4
     assert query_dashboard_event_count(db_path=db_path) == 4
     assert "stale" not in refresh_metadata(db_path)
+
+
+def test_dashboard_event_query_uses_sql_prefilters(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+
+    model_rows = query_dashboard_events(db_path=db_path, limit=0, model="codex-auto-review")
+    effort_rows = query_dashboard_events(db_path=db_path, limit=0, effort="xhigh")
+    token_rows = query_dashboard_events(db_path=db_path, limit=0, min_tokens=100)
+    thread_rows = query_dashboard_events(
+        db_path=db_path,
+        limit=0,
+        thread="Add Codex token tracking",
+    )
+    session_rows = query_dashboard_events(db_path=db_path, limit=0, thread=SESSION_ID)
+    since_rows = query_dashboard_events(db_path=db_path, limit=0, since="2026-05-17")
+    future_rows = query_dashboard_events(db_path=db_path, limit=0, until="2000-01-01")
+
+    assert len(model_rows) == 1
+    assert model_rows[0]["model"] == "codex-auto-review"
+    assert {row["effort"] for row in effort_rows} == {"xhigh"}
+    assert {row["total_tokens"] for row in token_rows} == {100, 200}
+    assert {row["session_id"] for row in thread_rows} >= {SESSION_ID, SECOND_SESSION_ID}
+    assert {row["session_id"] for row in session_rows} == {SESSION_ID}
+    assert len(since_rows) == 4
+    assert future_rows == []
+
+
+def test_large_history_query_prefilter_uses_sql_indexes(tmp_path: Path) -> None:
+    db_path = tmp_path / "usage.sqlite3"
+    events = [
+        UsageEvent(
+            record_id=f"record-{index}",
+            session_id=f"session-{index % 100}",
+            thread_name=f"Thread {index % 25}",
+            session_updated_at="2026-05-17T18:58:27Z",
+            event_timestamp=f"2026-05-{(index % 28) + 1:02d}T12:00:00Z",
+            source_file=f"/tmp/synthetic/{index}.jsonl",
+            line_number=index + 1,
+            turn_id=f"turn-{index}",
+            turn_timestamp=f"2026-05-{(index % 28) + 1:02d}T12:00:00Z",
+            cwd=f"/tmp/project-{index % 10}",
+            model="gpt-5.5" if index % 2 == 0 else "codex-auto-review",
+            effort="high" if index % 3 == 0 else "low",
+            current_date="2026-05-17",
+            timezone="UTC",
+            thread_source="user",
+            subagent_type=None,
+            agent_role=None,
+            agent_nickname=None,
+            parent_session_id=None,
+            parent_thread_name=None,
+            parent_session_updated_at=None,
+            model_context_window=200000,
+            input_tokens=1000 + index,
+            cached_input_tokens=200,
+            output_tokens=100,
+            reasoning_output_tokens=10,
+            total_tokens=1100 + index,
+            cumulative_input_tokens=1000 + index,
+            cumulative_cached_input_tokens=200,
+            cumulative_output_tokens=100,
+            cumulative_reasoning_output_tokens=10,
+            cumulative_total_tokens=1100 + index,
+        )
+        for index in range(10_000)
+    ]
+    upsert_usage_events(events, db_path=db_path)
+
+    rows = query_dashboard_events(
+        db_path=db_path,
+        limit=25,
+        model="gpt-5.5",
+        effort="high",
+        min_tokens=9000,
+    )
+    with connect(db_path) as conn:
+        init_db(conn)
+        plan = " ".join(
+            str(row["detail"])
+            for row in conn.execute(
+                """
+                EXPLAIN QUERY PLAN
+                SELECT *
+                FROM usage_events
+                WHERE model = ? AND effort = ? AND total_tokens >= ?
+                """,
+                ("gpt-5.5", "high", 9000),
+            )
+        )
+
+    assert len(rows) == 25
+    assert all(row["model"] == "gpt-5.5" for row in rows)
+    assert all(row["effort"] == "high" for row in rows)
+    assert all(row["total_tokens"] >= 9000 for row in rows)
+    assert "idx_usage_model_effort" in plan
 
 
 def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:

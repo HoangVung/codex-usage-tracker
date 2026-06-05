@@ -161,6 +161,9 @@ def _migrate_v1(conn: sqlite3.Connection) -> None:
         CREATE INDEX IF NOT EXISTS idx_usage_timestamp ON usage_events(event_timestamp);
         CREATE INDEX IF NOT EXISTS idx_usage_model_effort ON usage_events(model, effort);
         CREATE INDEX IF NOT EXISTS idx_usage_thread ON usage_events(thread_name);
+        CREATE INDEX IF NOT EXISTS idx_usage_parent_thread ON usage_events(parent_thread_name);
+        CREATE INDEX IF NOT EXISTS idx_usage_parent_session ON usage_events(parent_session_id);
+        CREATE INDEX IF NOT EXISTS idx_usage_total_tokens ON usage_events(total_tokens);
         """
     )
 
@@ -407,9 +410,24 @@ def query_usage_record(
 
 
 def query_dashboard_events(
-    db_path: Path = DEFAULT_DB_PATH, limit: int | None = 5000, since: str | None = None
+    db_path: Path = DEFAULT_DB_PATH,
+    limit: int | None = 5000,
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    min_tokens: int | None = None,
 ) -> list[dict[str, Any]]:
-    where_clause, params = _since_where_clause(since)
+    where_clause, params = _usage_where_clause(
+        since=since,
+        until=until,
+        model=model,
+        effort=effort,
+        thread=thread,
+        min_tokens=min_tokens,
+        table_alias="usage_events",
+    )
     normalized_limit = _normalize_limit(limit)
     limit_clause = "LIMIT ?" if normalized_limit is not None else ""
     query_params = [*params, normalized_limit] if normalized_limit is not None else params
@@ -536,9 +554,49 @@ def _group_expression(group_by: str) -> str:
 
 
 def _since_where_clause(since: str | None) -> tuple[str, list[str]]:
-    if not since:
+    return _usage_where_clause(since=since)
+
+
+def _usage_where_clause(
+    *,
+    since: str | None = None,
+    until: str | None = None,
+    model: str | None = None,
+    effort: str | None = None,
+    thread: str | None = None,
+    min_tokens: int | None = None,
+    table_alias: str | None = None,
+) -> tuple[str, list[Any]]:
+    prefix = f"{table_alias}." if table_alias else ""
+    clauses: list[str] = []
+    params: list[Any] = []
+    if since:
+        clauses.append(f"{prefix}event_timestamp >= ?")
+        params.append(since)
+    if until:
+        clauses.append(f"{prefix}event_timestamp <= ?")
+        params.append(until)
+    if model:
+        clauses.append(f"{prefix}model = ?")
+        params.append(model)
+    if effort:
+        clauses.append(f"{prefix}effort = ?")
+        params.append(effort)
+    if thread:
+        clauses.append(
+            "("
+            f"{prefix}thread_name = ? OR "
+            f"{prefix}parent_thread_name = ? OR "
+            f"{prefix}session_id = ?"
+            ")"
+        )
+        params.extend([thread, thread, thread])
+    if min_tokens is not None:
+        clauses.append(f"{prefix}total_tokens >= ?")
+        params.append(min_tokens)
+    if not clauses:
         return "", []
-    return "WHERE event_timestamp >= ?", [since]
+    return "WHERE " + " AND ".join(clauses), params
 
 
 def _normalize_limit(limit: int | None) -> int | None:
