@@ -83,6 +83,7 @@ codex-usage-tracker update-pricing
 codex-usage-tracker serve-dashboard --open</code></pre>
     <p>For optional allowance context, run <code>codex-usage-tracker init-allowance</code> and copy current 5-hour or weekly remaining usage from Codex Usage or <code>/status</code> into the local template.</p>
     <p>The server enables live aggregate refresh and on-demand context loading. Static file mode can still filter, sort, and inspect aggregate fields, but cannot refresh logs or load context.</p>
+    <p>The localhost server uses a random per-server token for refresh and context API calls, validates loopback <code>Host</code> and <code>Origin</code> headers, and can run as aggregate-only with <code>codex-usage-tracker serve-dashboard --no-context-api</code>.</p>
 
     <h2>Insights View</h2>
     <img src="assets/dashboard-insights.png" alt="Insights view with ranked attention cards, investigation presets, and top threads by attention score.">
@@ -112,7 +113,7 @@ codex-usage-tracker serve-dashboard --open</code></pre>
 
     <h2>Details And Context</h2>
     <img src="assets/dashboard-details.png" alt="Details panel showing aggregate usage fields for a selected call.">
-    <p>The details panel shows primary cost, Codex credits, allowance impact, cache, context, pricing, and next-action signals first. It then groups thread narrative, token/pricing breakdowns, collapsed raw identifiers, and source metadata. When served from localhost, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand.</p>
+    <p>The details panel shows primary cost, Codex credits, allowance impact, cache, context, pricing, and next-action signals first. It then groups thread narrative, token/pricing breakdowns, collapsed raw identifiers, and source metadata. When served from localhost with the context API enabled, <code>Load context</code> fetches one redacted, size-limited source excerpt on demand. When started with <code>--no-context-api</code>, context buttons stay disabled and the dashboard remains aggregate-only.</p>
 
     <h2>Investigating Long Chat Growth</h2>
     <p class="note">Prompt caching helps, but cached input is not free. Long-running chats can carry a large cached prefix into later turns, so usage can climb quickly even when the visible request looks small.</p>

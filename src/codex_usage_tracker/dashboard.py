@@ -36,6 +36,8 @@ def dashboard_payload(
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     since: str | None = None,
+    api_token: str | None = None,
+    context_api_enabled: bool = False,
 ) -> dict[str, object]:
     """Return aggregate-only dashboard data without rendering HTML."""
 
@@ -70,6 +72,8 @@ def dashboard_payload(
         "limit_label": "All" if normalized_limit is None else str(normalized_limit),
         "parser_diagnostics": parser_diagnostics,
         "parser_adapter": metadata.get("parser_adapter"),
+        "api_token": api_token or "",
+        "context_api_enabled": context_api_enabled,
     }
 
 
@@ -80,6 +84,8 @@ def generate_dashboard(
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
     since: str | None = None,
+    api_token: str | None = None,
+    context_api_enabled: bool = False,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     guide_href = _dashboard_guide_href(output_path)
@@ -93,6 +99,8 @@ def generate_dashboard(
             pricing_path=pricing_path,
             allowance_path=allowance_path,
             since=since,
+            api_token=api_token,
+            context_api_enabled=context_api_enabled,
         ),
         ensure_ascii=True,
     ).replace("</", "<\\/")

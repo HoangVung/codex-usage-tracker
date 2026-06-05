@@ -233,6 +233,10 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "usage_credits" in dashboard
     assert "parser_diagnostics" in dashboard
     assert "parserDiagnostics" in dashboard_js
+    assert "api_token" in dashboard
+    assert "context_api_enabled" in dashboard
+    assert "X-Codex-Usage-Token" in dashboard_js
+    assert "contextApiEnabled" in dashboard_js
     assert "usage_credit_confidence" in dashboard
     assert "Credit rates:" in dashboard_js
     assert "Codex allowance usage" in dashboard_js
@@ -332,14 +336,22 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
         include_archived=False,
         dashboard_name="dashboard.html",
         context_chars=2000,
+        api_token="test-token",
+        context_api_enabled=True,
         refresh_lock=threading.Lock(),
     )
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
+        refresh_without_token = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1&limit=2"
+        )
         with urllib.request.urlopen(  # noqa: S310 - local test server only
-            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1&limit=2",
+            urllib.request.Request(
+                f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1&limit=2",
+                headers={"X-Codex-Usage-Token": "test-token"},
+            ),
             timeout=5,
         ) as response:
             content_security_policy = response.headers.get("Content-Security-Policy")
@@ -350,11 +362,16 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
             timeout=5,
         ) as response:
             all_payload = json.loads(response.read().decode("utf-8"))
+        forbidden_origin = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/usage",
+            headers={"Origin": "http://example.test"},
+        )
     finally:
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)
 
+    assert refresh_without_token["status"] == 403
     assert limited_payload["refresh_result"]["parsed_events"] == 4
     assert limited_payload["refresh_result"]["skipped_events"] == 0
     assert limited_payload["refresh_result"]["parser_diagnostics"] == {}
@@ -364,6 +381,7 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert limited_payload["limit"] == 2
     assert content_security_policy is not None
     assert "connect-src 'self'" in content_security_policy
+    assert "unsafe-inline" not in content_security_policy
     assert referrer_policy == "no-referrer"
     assert len(all_payload["rows"]) == 4
     assert all_payload["loaded_row_count"] == 4
@@ -376,6 +394,9 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
     assert limited_payload["rows"][0]["usage_credits"] is not None
     assert "refreshed_at" in limited_payload
     assert limited_payload["parser_diagnostics"] == {}
+    assert limited_payload["api_token"] == "test-token"
+    assert limited_payload["context_api_enabled"] is True
+    assert forbidden_origin["status"] == 403
     assert "SECRET RAW PROMPT" not in json.dumps(limited_payload)
 
 
@@ -403,6 +424,8 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
         include_archived=False,
         dashboard_name="dashboard.html",
         context_chars=2000,
+        api_token="test-token",
+        context_api_enabled=True,
         refresh_lock=threading.Lock(),
     )
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
@@ -413,7 +436,8 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
             f"http://127.0.0.1:{server.server_port}/api/usage"
         )
         context_error = _http_error_json(
-            f"http://127.0.0.1:{server.server_port}/api/context?record_id=abc"
+            f"http://127.0.0.1:{server.server_port}/api/context?record_id=abc",
+            headers={"X-Codex-Usage-Token": "test-token"},
         )
     finally:
         server.shutdown()
@@ -424,6 +448,42 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
     assert "Database error" in usage_error["payload"]["error"]
     assert context_error["status"] == 500
     assert "Database error" in context_error["payload"]["error"]
+
+
+def test_dashboard_server_can_disable_context_api(tmp_path: Path) -> None:
+    from codex_usage_tracker.server import _UsageDashboardHandler
+
+    handler = partial(
+        _UsageDashboardHandler,
+        directory=str(tmp_path),
+        db_path=tmp_path / "usage.sqlite3",
+        pricing_path=tmp_path / "pricing.json",
+        allowance_path=tmp_path / "allowance.json",
+        limit=5000,
+        since=None,
+        codex_home=tmp_path / ".codex",
+        include_archived=False,
+        dashboard_name="dashboard.html",
+        context_chars=2000,
+        api_token="test-token",
+        context_api_enabled=False,
+        refresh_lock=threading.Lock(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        context_error = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/context?record_id=abc",
+            headers={"X-Codex-Usage-Token": "test-token"},
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+
+    assert context_error["status"] == 403
+    assert "disabled" in context_error["payload"]["error"]
 
 
 def test_dashboard_query_limit_zero_loads_all_rows(tmp_path: Path) -> None:
@@ -707,9 +767,10 @@ def _write_pricing(path: Path) -> Path:
     return path
 
 
-def _http_error_json(url: str) -> dict[str, object]:
+def _http_error_json(url: str, headers: dict[str, str] | None = None) -> dict[str, object]:
+    request = urllib.request.Request(url, headers=headers or {})
     try:
-        urllib.request.urlopen(url, timeout=5)  # noqa: S310 - local test server only
+        urllib.request.urlopen(request, timeout=5)  # noqa: S310 - local test server only
     except urllib.error.HTTPError as exc:
         return {
             "status": exc.code,

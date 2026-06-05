@@ -8,6 +8,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     let allowanceWindows = Array.isArray(initialPayload.allowance_windows) ? initialPayload.allowance_windows : [];
     let allowanceError = initialPayload.allowance_error || '';
     let parserDiagnostics = initialPayload.parser_diagnostics || {};
+    let apiToken = initialPayload.api_token || '';
+    let contextApiEnabled = Boolean(initialPayload.context_api_enabled);
     let totalAvailableRows = Number(initialPayload.total_available_rows || data.length);
     let loadedLimit = payloadLimit(initialPayload);
     const rowsEl = document.getElementById('rows');
@@ -1126,10 +1128,13 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     }
     function contextControls(row) {
       const fileMode = window.location.protocol === 'file:';
-      const disabled = fileMode ? ' disabled' : '';
+      const apiUnavailable = !contextApiEnabled || !apiToken;
+      const disabled = fileMode || apiUnavailable ? ' disabled' : '';
       const hint = fileMode
         ? 'Open this dashboard with codex-usage-tracker serve-dashboard to load raw context on demand.'
-        : 'Context is not embedded in this dashboard. Press a button to read this call from the local JSONL source.';
+        : apiUnavailable
+          ? 'Context loading is disabled for this dashboard server. Restart with --context-api explicit to enable explicit row actions.'
+          : 'Context is not embedded in this dashboard. Press a button to read this call from the local JSONL source.';
       return `
         <div class="context-actions">
           <button class="context-button" type="button" data-context-load${disabled}>Load context</button>
@@ -1156,7 +1161,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (includeToolOutput) params.set('include_tool_output', '1');
       try {
         const response = await fetch(`/api/context?${params.toString()}`, {
-          headers: { 'Accept': 'application/json' },
+          headers: {
+            'Accept': 'application/json',
+            'X-Codex-Usage-Token': apiToken,
+          },
           cache: 'no-store',
         });
         if (!response.ok) {
@@ -1374,6 +1382,8 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       allowanceWindows = Array.isArray(nextPayload.allowance_windows) ? nextPayload.allowance_windows : [];
       allowanceError = nextPayload.allowance_error || '';
       parserDiagnostics = nextPayload.parser_diagnostics || {};
+      apiToken = nextPayload.api_token || apiToken;
+      contextApiEnabled = Boolean(nextPayload.context_api_enabled);
       totalAvailableRows = Number(nextPayload.total_available_rows || data.length);
       loadedLimit = payloadLimit(nextPayload);
       rebuildDashboardIndexes();
@@ -1397,7 +1407,10 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       try {
         const params = new URLSearchParams({ refresh: '1', limit: loadLimitEl.value, _: String(Date.now()) });
         const response = await fetch(`/api/usage?${params.toString()}`, {
-          headers: { 'Accept': 'application/json' },
+          headers: {
+            'Accept': 'application/json',
+            'X-Codex-Usage-Token': apiToken,
+          },
           cache: 'no-store',
         });
         if (!response.ok) {

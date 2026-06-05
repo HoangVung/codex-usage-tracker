@@ -33,6 +33,8 @@ codex-usage-tracker dashboard --open
 
 Static file mode can still filter, sort, and inspect aggregate call fields. It cannot refresh from logs or load raw context until you open the dashboard through `serve-dashboard`.
 
+The localhost server uses a random per-server token for refresh and context API calls, validates loopback `Host` and `Origin` headers, and can run as aggregate-only with `codex-usage-tracker serve-dashboard --no-context-api`.
+
 ## Insights View
 
 ![Insights view with ranked attention cards, investigation presets, and top threads by attention score.](assets/dashboard-insights.png)
@@ -114,6 +116,7 @@ When served from localhost, the details panel includes `Load context` and `Inclu
 - `Load context` fetches a size-limited, redacted context excerpt for only that call.
 - `Include tool output` repeats the request with tool output included, still redacted and capped.
 - Raw context is not written to SQLite, CSV, or the generated dashboard HTML.
+- If the server was started with `--no-context-api`, the context buttons stay disabled and the dashboard remains aggregate-only.
 
 ## Practical Workflow
 

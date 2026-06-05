@@ -302,6 +302,17 @@ def _add_dashboard_parsers(
     serve.add_argument("--host", default="127.0.0.1")
     serve.add_argument("--port", type=int, default=8765)
     serve.add_argument("--context-chars", type=int, default=DEFAULT_CONTEXT_CHARS)
+    serve.add_argument(
+        "--context-api",
+        choices=["explicit", "disabled"],
+        default="explicit",
+        help="Enable explicit per-row context loading or disable the context API.",
+    )
+    serve.add_argument(
+        "--no-context-api",
+        action="store_true",
+        help="Serve aggregate dashboard refresh only and disable /api/context.",
+    )
     serve.add_argument("--open", action="store_true")
     serve.add_argument(
         "--refresh",
@@ -656,6 +667,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
         open_browser=args.open,
         codex_home=args.codex_home,
         include_archived=args.include_archived,
+        context_api="disabled" if args.no_context_api else args.context_api,
     )
     return 0
 

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import hmac
+import secrets
 import sqlite3
 import threading
 import webbrowser
@@ -38,10 +40,14 @@ def serve_dashboard(
     open_browser: bool = False,
     codex_home: Path = DEFAULT_CODEX_HOME,
     include_archived: bool = False,
+    context_api: str = "explicit",
 ) -> None:
     """Generate and serve the dashboard plus a localhost-only context endpoint."""
 
     _validate_loopback_host(host)
+    _validate_context_api_mode(context_api)
+    api_token = secrets.token_urlsafe(32)
+    context_api_enabled = context_api != "disabled"
     output = generate_dashboard(
         db_path=db_path,
         output_path=output_path,
@@ -49,6 +55,8 @@ def serve_dashboard(
         pricing_path=pricing_path,
         allowance_path=allowance_path,
         since=since,
+        api_token=api_token,
+        context_api_enabled=context_api_enabled,
     )
     handler = partial(
         _UsageDashboardHandler,
@@ -62,12 +70,16 @@ def serve_dashboard(
         include_archived=include_archived,
         dashboard_name=output.name,
         context_chars=context_chars,
+        api_token=api_token,
+        context_api_enabled=context_api_enabled,
         refresh_lock=threading.Lock(),
     )
     server = ThreadingHTTPServer((host, port), handler)
     url = f"http://{_url_host(host)}:{port}/{output.name}"
     print(f"Serving Codex usage dashboard at {url}")
-    print("Aggregate rows refresh through /api/usage; raw context is loaded only through /api/context after a row action.")
+    context_mode = "enabled for explicit row actions" if context_api_enabled else "disabled"
+    print("Aggregate rows refresh through /api/usage with a per-server token.")
+    print(f"Raw context API is {context_mode}; context is never embedded in the dashboard HTML.")
     if open_browser:
         webbrowser.open(url)
     try:
@@ -91,6 +103,8 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         include_archived: bool,
         dashboard_name: str,
         context_chars: int,
+        api_token: str,
+        context_api_enabled: bool,
         refresh_lock: threading.Lock,
         **kwargs: object,
     ) -> None:
@@ -103,11 +117,16 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         self._include_archived = include_archived
         self._dashboard_name = dashboard_name
         self._context_chars = context_chars
+        self._api_token = api_token
+        self._context_api_enabled = context_api_enabled
         self._refresh_lock = refresh_lock
         super().__init__(*args, **kwargs)
 
     def do_GET(self) -> None:  # noqa: N802 - stdlib hook name
         parsed = urlparse(self.path)
+        if not self._request_origin_allowed():
+            self._send_json(HTTPStatus.FORBIDDEN, {"error": "Request host or origin is not allowed"})
+            return
         if parsed.path == "/api/context":
             self._handle_context(parsed.query)
             return
@@ -123,8 +142,8 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header(
             "Content-Security-Policy",
-            "default-src 'self'; script-src 'self' 'unsafe-inline'; "
-            "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
+            "default-src 'self'; script-src 'self'; "
+            "style-src 'self'; connect-src 'self'; "
             "img-src 'self' data:; object-src 'none'; base-uri 'none'",
         )
         super().end_headers()
@@ -136,6 +155,15 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
 
     def _handle_context(self, query: str) -> None:
         params = parse_qs(query)
+        if not self._context_api_enabled:
+            self._send_json(
+                HTTPStatus.FORBIDDEN,
+                {"error": "Context API is disabled for this dashboard server."},
+            )
+            return
+        if not self._has_valid_api_token(params):
+            self._send_json(HTTPStatus.FORBIDDEN, {"error": "Valid API token is required"})
+            return
         record_id = _first(params.get("record_id"))
         if not record_id:
             self._send_json(
@@ -177,6 +205,12 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         refresh_result = None
         try:
             if _truthy(_first(params.get("refresh"))):
+                if not self._has_valid_api_token(params):
+                    self._send_json(
+                        HTTPStatus.FORBIDDEN,
+                        {"error": "Valid API token is required for refresh"},
+                    )
+                    return
                 with self._refresh_lock:
                     result = refresh_usage_index(
                         codex_home=self._codex_home,
@@ -197,6 +231,8 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
                 pricing_path=self._pricing_path,
                 allowance_path=self._allowance_path,
                 since=self._since,
+                api_token=self._api_token,
+                context_api_enabled=self._context_api_enabled,
             )
         except sqlite3.Error as exc:
             self._send_json(
@@ -213,6 +249,25 @@ class _UsageDashboardHandler(SimpleHTTPRequestHandler):
         payload["refreshed_at"] = _utc_now()
         payload["refresh_result"] = refresh_result
         self._send_json(HTTPStatus.OK, payload)
+
+    def _request_origin_allowed(self) -> bool:
+        if not _allowed_loopback_host(_host_header_name(self.headers.get("Host"))):
+            return False
+        origin = self.headers.get("Origin")
+        if not origin:
+            return True
+        parsed = urlparse(origin)
+        if parsed.scheme not in {"http", "https"}:
+            return False
+        if not _allowed_loopback_host(parsed.hostname):
+            return False
+        if parsed.port is not None and parsed.port != self.server.server_port:
+            return False
+        return True
+
+    def _has_valid_api_token(self, params: dict[str, list[str]]) -> bool:
+        provided = self.headers.get("X-Codex-Usage-Token") or _first(params.get("api_token")) or ""
+        return hmac.compare_digest(str(provided), self._api_token)
 
     def _send_json(self, status: HTTPStatus, payload: dict[str, object]) -> None:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
@@ -261,6 +316,32 @@ def _validate_loopback_host(host: str) -> None:
         ) from exc
     if not address.is_loopback:
         raise ValueError("serve-dashboard refuses to expose raw context off localhost")
+
+
+def _validate_context_api_mode(mode: str) -> None:
+    if mode not in {"explicit", "disabled"}:
+        raise ValueError("--context-api must be explicit or disabled")
+
+
+def _allowed_loopback_host(host: str | None) -> bool:
+    if not host:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _host_header_name(value: str | None) -> str | None:
+    if not value:
+        return None
+    host = value.strip()
+    if host.startswith("["):
+        end = host.find("]")
+        return host[1:end] if end > 0 else None
+    return host.split(":", 1)[0]
 
 
 def _url_host(host: str) -> str:

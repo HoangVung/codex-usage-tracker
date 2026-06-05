@@ -203,9 +203,12 @@ Serve the dashboard with live aggregate refresh and lazy raw-context loading:
 
 ```bash
 codex-usage-tracker serve-dashboard --open
+codex-usage-tracker serve-dashboard --no-context-api --open
 ```
 
-When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle that polls the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
+When served this way, the dashboard gets a `Refresh` button plus a `Live` toggle that polls the localhost `/api/usage` endpoint every 10 seconds while the tab is visible. Refresh calls and `/api/context` require a random per-server token embedded in that generated dashboard, and the server rejects non-loopback `Host` or cross-origin `Origin` headers. Each poll refreshes the SQLite aggregate index from local Codex logs and replaces the in-memory dashboard rows without embedding raw transcript content. Use the `Load` selector to fetch 5,000, 10,000, 20,000, or all aggregate calls; `--limit 0` also means all calls for CLI-generated dashboards. The table renders 500 rows or thread groups per page so larger histories remain responsive. Each call detail panel also gets a `Load context` action when the context API is enabled. Pressing it fetches only that call's logged turn context from the original local JSONL source. Tool output is omitted by default; the `Include tool output` action loads redacted, size-limited tool output for that call. None of this raw context is written to SQLite, CSV, or the generated HTML.
+
+`serve-dashboard --context-api explicit` is the default and keeps context loading as an explicit per-row action. `serve-dashboard --no-context-api` or `--context-api disabled` serves live aggregate refresh while disabling `/api/context` entirely.
 
 Dashboard behavior:
 
@@ -369,6 +372,8 @@ The SQLite database is stored at `~/.codex-usage-tracker/usage.sqlite3` by defau
 - subagent source, role, nickname, parent session id, and parent thread name when present
 
 Raw chat text and tool outputs are ignored by the parser and are never written to the tracker database, CSV exports, or generated dashboard HTML. `usage_call_context`, `codex-usage-tracker context`, and the `serve-dashboard` context endpoint read a single source JSONL file only when explicitly requested, redact common secret patterns, and cap returned text size.
+
+The localhost server binds only to loopback hosts, validates loopback `Host` and `Origin` headers, protects refresh/context API calls with a random per-server token, and can disable the context API entirely with `--no-context-api`.
 
 For MCP users, `usage_call_context` is additionally disabled unless the MCP server process has `CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1` in its environment. Aggregate MCP tools do not require that opt-in.
 
