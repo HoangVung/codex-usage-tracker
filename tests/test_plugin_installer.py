@@ -35,6 +35,7 @@ def test_install_plugin_writes_generated_wrapper_and_marketplace(tmp_path: Path)
     assert manifest["name"] == "codex-usage-tracker"
     assert manifest["version"] == "0.2.0"
     assert (plugin_dir / "assets" / "icon.svg").exists()
+    assert (plugin_dir / "skills" / "codex-usage-api" / "SKILL.md").exists()
     assert (plugin_dir / "skills" / "codex-usage-tracker" / "SKILL.md").exists()
     assert mcp_config["mcpServers"]["codex-usage-tracker"]["command"] == str(python_path)
     assert mcp_config["mcpServers"]["codex-usage-tracker"]["args"] == [

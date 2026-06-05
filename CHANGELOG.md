@@ -8,6 +8,7 @@
 - Fix Python 3.10 compatibility for UTC timestamps and release checks.
 - Add package-owned Codex plugin installation with `codex-usage-tracker install-plugin`.
 - Package plugin assets and the Codex skill into the Python wheel.
+- Add a companion `codex-usage-api` skill for conversational analysis through aggregate-only API/MCP data.
 - Add distribution metadata, source distribution manifest, and CI build checks.
 - Add `python -m codex_usage_tracker` support and CLI `--version` output.
 - Add release-readiness checks for version alignment, required docs, package data, built wheels, and tracked secret patterns.

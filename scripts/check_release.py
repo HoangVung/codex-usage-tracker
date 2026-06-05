@@ -43,6 +43,7 @@ REQUIRED_FILES = [
     ".github/workflows/pricing-compat.yml",
     ".codex-plugin/plugin.json",
     ".mcp.json",
+    "skills/codex-usage-api/SKILL.md",
     "skills/codex-usage-tracker/SKILL.md",
     "skills/codex-usage-tracker/scripts/run_mcp.py",
     "src/codex_usage_tracker/plugin_data/assets/icon.svg",
@@ -56,6 +57,7 @@ REQUIRED_FILES = [
     "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-calls.png",
     "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-threads.png",
     "src/codex_usage_tracker/plugin_data/docs/assets/dashboard-details.png",
+    "src/codex_usage_tracker/plugin_data/skills/codex-usage-api/SKILL.md",
     "src/codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
 ]
 WHEEL_REQUIRED_MEMBERS = {
@@ -70,10 +72,12 @@ WHEEL_REQUIRED_MEMBERS = {
     "codex_usage_tracker/plugin_data/docs/assets/dashboard-calls.png",
     "codex_usage_tracker/plugin_data/docs/assets/dashboard-threads.png",
     "codex_usage_tracker/plugin_data/docs/assets/dashboard-details.png",
+    "codex_usage_tracker/plugin_data/skills/codex-usage-api/SKILL.md",
     "codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md",
 }
 SDIST_REQUIRED_MEMBERS = {
     "docs/cli-json-schemas.md",
+    "skills/codex-usage-api/SKILL.md",
     "skills/codex-usage-tracker/SKILL.md",
     "skills/codex-usage-tracker/scripts/run_mcp.py",
 }
@@ -185,14 +189,7 @@ def _check_packaging_metadata() -> list[str]:
     manifest = (REPO_ROOT / "MANIFEST.in").read_text(encoding="utf-8")
     if "recursive-include skills *.md *.py" not in manifest:
         failures.append("MANIFEST.in should include Codex skill scripts in the source distribution")
-    source_skill = (REPO_ROOT / "skills/codex-usage-tracker/SKILL.md").read_text(
-        encoding="utf-8"
-    )
-    package_skill = (
-        REPO_ROOT / "src/codex_usage_tracker/plugin_data/skills/codex-usage-tracker/SKILL.md"
-    ).read_text(encoding="utf-8")
-    if source_skill != package_skill:
-        failures.append("source-tree Codex skill must match packaged plugin_data skill")
+    failures.extend(_check_skill_packaging())
     launcher = (REPO_ROOT / "skills/codex-usage-tracker/scripts/run_mcp.py").read_text(
         encoding="utf-8"
     )
@@ -205,6 +202,31 @@ def _check_packaging_metadata() -> list[str]:
         failures.append("MCP runtime launcher package pin is not reachable from HEAD")
     if "PACKAGE_SPEC_MARKER" not in launcher:
         failures.append("MCP runtime launcher should invalidate cached runtimes when package spec changes")
+    return failures
+
+
+def _check_skill_packaging() -> list[str]:
+    failures: list[str] = []
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    package_data = set(pyproject["tool"]["setuptools"]["package-data"]["codex_usage_tracker.plugin_data"])
+    for source_skill in sorted((REPO_ROOT / "skills").glob("*/SKILL.md")):
+        skill_name = source_skill.parent.name
+        package_skill = (
+            REPO_ROOT
+            / "src"
+            / "codex_usage_tracker"
+            / "plugin_data"
+            / "skills"
+            / skill_name
+            / "SKILL.md"
+        )
+        if not package_skill.exists():
+            failures.append(f"missing packaged Codex skill copy: {skill_name}")
+            continue
+        if source_skill.read_text(encoding="utf-8") != package_skill.read_text(encoding="utf-8"):
+            failures.append(f"source-tree Codex skill must match packaged copy: {skill_name}")
+        if f"skills/{skill_name}/*" not in package_data:
+            failures.append(f"pyproject.toml package data is missing skill: {skill_name}")
     return failures
 
 

@@ -405,6 +405,13 @@ runtime and reinstalls when the bundled package pin changes. Set
 `CODEX_USAGE_TRACKER_RUNTIME_DIR` to use a separate cache while debugging
 plugin startup.
 
+## Codex Skills
+
+The plugin installs two companion skills:
+
+- `codex-usage-tracker` for operating the tracker, refreshing data, generating dashboards, exporting CSV, and using MCP tools directly.
+- `codex-usage-api` for conversational usage analysis. It guides Codex to refresh aggregate data, call the JSON API/MCP tools, compare threads/projects/models, and explain pricing, credit, cache, context, and allowance limitations without exposing raw transcript content.
+
 ## MCP Tools
 
 - `refresh_usage_index`

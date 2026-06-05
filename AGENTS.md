@@ -23,6 +23,8 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `src/codex_usage_tracker/allowance.py` - Codex credit-rate and optional local allowance-window helpers.
 - `src/codex_usage_tracker/plugin_installer.py` - package-owned local Codex plugin installer.
 - `src/codex_usage_tracker/plugin_data/` - plugin assets, dashboard template/assets, local dashboard guide, screenshots, and skill files bundled into wheels.
+- `skills/codex-usage-tracker/` and `src/codex_usage_tracker/plugin_data/skills/codex-usage-tracker/` - operational Codex skill for tracker setup, summaries, dashboard generation, and MCP tools.
+- `skills/codex-usage-api/` and `src/codex_usage_tracker/plugin_data/skills/codex-usage-api/` - companion Codex skill for conversational analysis using the stable JSON API/MCP tools.
 - `src/codex_usage_tracker/server.py` - localhost dashboard server with live aggregate refresh and lazy context endpoints.
 - `~/.codex-usage-tracker/pricing.json` - optional local-only pricing config, never committed.
 - `~/.codex-usage-tracker/allowance.json` - optional local-only copied allowance state, never committed.

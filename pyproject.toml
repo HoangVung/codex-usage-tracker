@@ -61,6 +61,7 @@ where = ["src"]
   "docs/*",
   "docs/assets/*",
   "rate_cards/*",
+  "skills/codex-usage-api/*",
   "skills/codex-usage-tracker/*",
 ]
 
