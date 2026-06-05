@@ -19,6 +19,7 @@ from codex_usage_tracker.pricing import (
 )
 from codex_usage_tracker.store import (
     connect,
+    EVENT_COLUMNS,
     export_usage_csv,
     init_db,
     query_dashboard_event_count,
@@ -351,6 +352,42 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "Pricing snapshot changed since the previous dashboard render" in updated_dashboard
 
 
+def test_dashboard_payload_contract_includes_analysis_metadata(tmp_path: Path) -> None:
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
+    refresh_usage_index(codex_home=codex_home, db_path=db_path)
+
+    payload = dashboard_payload(db_path=db_path, pricing_path=pricing_path)
+    row = payload["rows"][0]
+
+    assert {
+        "rows",
+        "pricing_configured",
+        "allowance_configured",
+        "loaded_row_count",
+        "total_available_rows",
+        "parser_diagnostics",
+        "parser_adapter",
+        "action_thresholds",
+        "project_metadata_privacy",
+    } <= set(payload)
+    assert {
+        "record_id",
+        "session_id",
+        "event_timestamp",
+        "cwd",
+        "total_tokens",
+        "cache_ratio",
+        "pricing_model",
+        "usage_credits",
+        "recommended_action",
+        "project_name",
+        "project_key",
+        "thread_attachment_label",
+    } <= set(row)
+
+
 def test_dashboard_payload_and_csv_privacy_mode_redact_project_metadata(tmp_path: Path) -> None:
     codex_home = _make_codex_home(tmp_path)
     db_path = tmp_path / "usage.sqlite3"
@@ -364,6 +401,7 @@ def test_dashboard_payload_and_csv_privacy_mode_redact_project_metadata(tmp_path
         privacy_mode="redacted",
     )
     csv_text = csv_path.read_text(encoding="utf-8")
+    csv_header = csv_text.splitlines()[0].split(",")
     first_row = payload["rows"][0]
 
     assert exported == 4
@@ -377,6 +415,7 @@ def test_dashboard_payload_and_csv_privacy_mode_redact_project_metadata(tmp_path
     assert "/tmp/codex-usage-tracker" not in json.dumps(payload)
     assert "/tmp/codex-usage-tracker" not in csv_text
     assert "[redacted cwd:" in csv_text
+    assert csv_header == EVENT_COLUMNS
 
 
 def test_dashboard_guide_link_can_use_docs_url_override(tmp_path: Path, monkeypatch) -> None:

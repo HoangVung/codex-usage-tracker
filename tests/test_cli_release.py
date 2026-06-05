@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 import os
+import shlex
 import subprocess
 import sys
 from pathlib import Path
+
+from codex_usage_tracker.cli import _COMMAND_HANDLERS
 
 
 def test_module_cli_version() -> None:
@@ -29,6 +32,38 @@ def test_release_check_script_passes() -> None:
     )
 
     assert "Release readiness checks passed." in result.stdout
+
+
+def test_readme_codex_usage_tracker_commands_reference_known_subcommands() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    readme = repo_root / "README.md"
+    commands = set(_COMMAND_HANDLERS)
+    documented: set[str] = set()
+    unresolved: list[str] = []
+
+    for raw_line in readme.read_text(encoding="utf-8").splitlines():
+        line = raw_line.strip()
+        if not line.startswith("codex-usage-tracker"):
+            continue
+        tokens = shlex.split(line)
+        command = next((token for token in tokens[1:] if token in commands), None)
+        if command:
+            documented.add(command)
+        elif "--version" not in tokens:
+            unresolved.append(line)
+
+    assert not unresolved
+    assert {
+        "setup",
+        "serve-dashboard",
+        "dashboard",
+        "query",
+        "summary",
+        "session",
+        "export",
+        "support-bundle",
+        "parse-allowance",
+    } <= documented
 
 
 def _subprocess_env() -> dict[str, str]:
