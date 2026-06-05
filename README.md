@@ -219,6 +219,8 @@ Dashboard behavior:
 - Investigation presets can jump directly to highest-cost threads, highest Codex credits, context bloat, cache misses, pricing gaps, or estimated-price review.
 - Cost cells show both USD estimates and Codex credit estimates when a model maps to the rate card.
 - The details panel groups primary cost/cache/context/allowance signals first, then thread narrative, token/pricing breakdowns, and collapsed raw aggregate metadata.
+- Call details include a recommended action and a "why flagged" explanation derived only from aggregate counters and pricing/allowance metadata.
+- Thread details include lifecycle signals such as first expensive turn, largest cumulative jump, cache trend, context trend, and whether subagent or auto-review work appeared before a usage spike.
 - Parser diagnostics from the latest refresh are surfaced as a compact warning when the parser sees drift, missing expected token fields, invalid counters, duplicate cumulative snapshots, or unknown event shapes.
 - Expanded thread calls are ordered oldest to newest so you can see how usage grew across the conversation.
 - Spawned subagents with logged parent sessions are shown under their parent thread when Codex logs enough metadata.
@@ -292,6 +294,14 @@ codex-usage-tracker init-allowance
 ```
 
 Edit `~/.codex-usage-tracker/allowance.json` with the 5-hour and weekly remaining values you see in Codex Settings > Usage, the Codex Usage dashboard, or `/status` during an active CLI session. The tracker can store `remaining_percent`, `reset_at`, `remaining_credits`, and `total_credits` for each window. If `total_credits` is present, call and thread details show the estimated share of that allowance; otherwise the dashboard shows the copied remaining percentages and reset context.
+
+Enable optional recommendation threshold overrides:
+
+```bash
+codex-usage-tracker init-thresholds
+```
+
+Edit `~/.codex-usage-tracker/thresholds.json` to adjust the aggregate-only thresholds used for low cache reuse, high context pressure, high uncached input, large cumulative threads, reasoning-output spikes, large low-output calls, and high estimated cost. The dashboard uses these values for presets, insight cards, row recommendations, and thread lifecycle summaries.
 
 Credit usage estimates are calculated from Codex's aggregate input, cached-input, and output token counters using the bundled OpenAI Codex rate-card snapshot from `https://help.openai.com/en/articles/20001106-codex-rate-card` and `https://developers.openai.com/codex/pricing`. Direct model matches are marked exact. Local aliases and inferred labels, such as code-review usage mapped to GPT-5.3-Codex, are marked estimated. Normal reports do not contact the network for allowance or credit estimates.
 

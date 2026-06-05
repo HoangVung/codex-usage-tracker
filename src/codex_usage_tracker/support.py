@@ -17,8 +17,10 @@ from codex_usage_tracker.paths import (
     DEFAULT_CODEX_HOME,
     DEFAULT_DB_PATH,
     DEFAULT_PRICING_PATH,
+    DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.pricing import load_pricing_config
+from codex_usage_tracker.recommendations import load_threshold_config
 from codex_usage_tracker.store import refresh_metadata, schema_state
 
 
@@ -29,6 +31,7 @@ def build_support_bundle(
     db_path: Path = DEFAULT_DB_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
 ) -> Path:
     """Write a local diagnostic bundle without raw logs or transcript content."""
 
@@ -39,6 +42,7 @@ def build_support_bundle(
         db_path=db_path,
         pricing_path=pricing_path,
         allowance_path=allowance_path,
+        thresholds_path=thresholds_path,
     )
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return output_path
@@ -50,11 +54,13 @@ def support_bundle_payload(
     db_path: Path = DEFAULT_DB_PATH,
     pricing_path: Path = DEFAULT_PRICING_PATH,
     allowance_path: Path = DEFAULT_ALLOWANCE_PATH,
+    thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
 ) -> dict[str, Any]:
     """Return support diagnostics safe to attach to a GitHub issue."""
 
     pricing = load_pricing_config(pricing_path)
     allowance = load_allowance_config(allowance_path)
+    thresholds = load_threshold_config(thresholds_path)
     return {
         "bundle_version": 1,
         "generated_at": datetime.now(timezone.utc)
@@ -79,6 +85,7 @@ def support_bundle_payload(
             "db_path": str(db_path.expanduser()),
             "pricing_path": str(pricing_path.expanduser()),
             "allowance_path": str(allowance_path.expanduser()),
+            "thresholds_path": str(thresholds_path.expanduser()),
         },
         "database": schema_state(db_path),
         "refresh": refresh_metadata(db_path),
@@ -93,6 +100,11 @@ def support_bundle_payload(
             "error": allowance.error,
             "window_count": len(allowance.windows),
             "source": allowance.source,
+        },
+        "thresholds": {
+            "loaded": thresholds.loaded,
+            "error": thresholds.error,
+            "keys": sorted(thresholds.thresholds),
         },
         "doctor": run_doctor(
             codex_home=codex_home,

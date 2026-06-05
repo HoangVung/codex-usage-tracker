@@ -237,6 +237,13 @@ def test_dashboard_and_csv_are_aggregate_only(tmp_path: Path) -> None:
     assert "context_api_enabled" in dashboard
     assert "X-Codex-Usage-Token" in dashboard_js
     assert "contextApiEnabled" in dashboard_js
+    assert "recommended_action" in dashboard
+    assert "flag_explanations" in dashboard
+    assert "action_recommendations" in dashboard
+    assert "action_thresholds" in dashboard
+    assert "Why flagged" in dashboard_js
+    assert "Thread lifecycle" in dashboard_js
+    assert "Largest cumulative jump" in dashboard_js
     assert "usage_credit_confidence" in dashboard
     assert "Credit rates:" in dashboard_js
     assert "Codex allowance usage" in dashboard_js
@@ -330,6 +337,7 @@ def test_dashboard_server_usage_api_refreshes_aggregate_rows(tmp_path: Path) -> 
         db_path=db_path,
         pricing_path=pricing_path,
         allowance_path=tmp_path / "allowance.json",
+        thresholds_path=tmp_path / "thresholds.json",
         limit=5000,
         since=None,
         codex_home=codex_home,
@@ -418,6 +426,7 @@ def test_dashboard_server_returns_json_for_sqlite_errors(tmp_path: Path, monkeyp
         db_path=tmp_path / "usage.sqlite3",
         pricing_path=tmp_path / "pricing.json",
         allowance_path=tmp_path / "allowance.json",
+        thresholds_path=tmp_path / "thresholds.json",
         limit=5000,
         since=None,
         codex_home=tmp_path / ".codex",
@@ -459,6 +468,7 @@ def test_dashboard_server_can_disable_context_api(tmp_path: Path) -> None:
         db_path=tmp_path / "usage.sqlite3",
         pricing_path=tmp_path / "pricing.json",
         allowance_path=tmp_path / "allowance.json",
+        thresholds_path=tmp_path / "thresholds.json",
         limit=5000,
         since=None,
         codex_home=tmp_path / ".codex",

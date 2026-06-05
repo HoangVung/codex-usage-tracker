@@ -26,6 +26,7 @@ from codex_usage_tracker.paths import (
     DEFAULT_PLUGIN_LINK,
     DEFAULT_PRICING_PATH,
     DEFAULT_SUPPORT_BUNDLE_PATH,
+    DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.parser import inspect_log, load_session_index
 from codex_usage_tracker.plugin_installer import install_plugin, uninstall_plugin
@@ -43,6 +44,7 @@ from codex_usage_tracker.reports import (
     build_pricing_coverage_report,
     build_summary_report,
 )
+from codex_usage_tracker.recommendations import write_threshold_template
 from codex_usage_tracker.store import (
     rebuild_usage_index,
     export_usage_csv,
@@ -80,6 +82,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--db", type=Path, default=DEFAULT_DB_PATH)
     parser.add_argument("--pricing", type=Path, default=DEFAULT_PRICING_PATH)
     parser.add_argument("--allowance", type=Path, default=DEFAULT_ALLOWANCE_PATH)
+    parser.add_argument("--thresholds", type=Path, default=DEFAULT_THRESHOLDS_PATH)
     subparsers = parser.add_subparsers(dest="command", required=True)
     _add_setup_parser(subparsers)
     _add_doctor_parser(subparsers)
@@ -99,6 +102,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_export_parser(subparsers)
     _add_pricing_parsers(subparsers)
     _add_allowance_parser(subparsers)
+    _add_threshold_parser(subparsers)
     _add_support_bundle_parser(subparsers)
     return parser
 
@@ -388,6 +392,17 @@ def _add_allowance_parser(
     allowance.add_argument("--force", action="store_true")
 
 
+def _add_threshold_parser(
+    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
+) -> None:
+    thresholds = subparsers.add_parser(
+        "init-thresholds",
+        help="Write a local template for dashboard recommendation thresholds",
+    )
+    thresholds.add_argument("--output", type=Path, default=None)
+    thresholds.add_argument("--force", action="store_true")
+
+
 def _add_support_bundle_parser(
     subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
 ) -> None:
@@ -624,6 +639,7 @@ def _run_dashboard(args: argparse.Namespace) -> int:
         pricing_path=args.pricing,
         allowance_path=args.allowance,
         since=args.since,
+        thresholds_path=args.thresholds,
     )
     print(f"Wrote dashboard to {output}")
     if args.open:
@@ -641,6 +657,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
         pricing_path=args.pricing,
         allowance_path=args.allowance,
         since=args.since,
+        thresholds_path=args.thresholds,
     )
     print(f"Opening dashboard at {output}")
     webbrowser.open(output.resolve().as_uri())
@@ -668,6 +685,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
         codex_home=args.codex_home,
         include_archived=args.include_archived,
         context_api="disabled" if args.no_context_api else args.context_api,
+        thresholds_path=args.thresholds,
     )
     return 0
 
@@ -734,6 +752,12 @@ def _run_init_allowance(args: argparse.Namespace) -> int:
     return 0
 
 
+def _run_init_thresholds(args: argparse.Namespace) -> int:
+    output = write_threshold_template(args.output or args.thresholds, force=args.force)
+    print(f"Wrote recommendation threshold template to {output}")
+    return 0
+
+
 def _run_support_bundle(args: argparse.Namespace) -> int:
     output = build_support_bundle(
         output_path=args.output,
@@ -741,6 +765,7 @@ def _run_support_bundle(args: argparse.Namespace) -> int:
         db_path=args.db,
         pricing_path=args.pricing,
         allowance_path=args.allowance,
+        thresholds_path=args.thresholds,
     )
     print(f"Wrote privacy-preserving support bundle to {output}")
     print("Bundle excludes raw logs, prompts, assistant messages, tool output, and context text.")
@@ -769,6 +794,7 @@ _COMMAND_HANDLERS = {
     "init-pricing": _run_init_pricing,
     "update-pricing": _run_update_pricing,
     "init-allowance": _run_init_allowance,
+    "init-thresholds": _run_init_thresholds,
     "support-bundle": _run_support_bundle,
 }
 

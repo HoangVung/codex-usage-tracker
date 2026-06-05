@@ -10,6 +10,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     let parserDiagnostics = initialPayload.parser_diagnostics || {};
     let apiToken = initialPayload.api_token || '';
     let contextApiEnabled = Boolean(initialPayload.context_api_enabled);
+    let actionThresholds = initialPayload.action_thresholds || {};
     let totalAvailableRows = Number(initialPayload.total_available_rows || data.length);
     let loadedLimit = payloadLimit(initialPayload);
     const rowsEl = document.getElementById('rows');
@@ -84,7 +85,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         sort: 'context',
         direction: 'desc',
         caption: 'Context bloat preset',
-        matches: row => Number(row.context_window_percent || 0) >= 0.6 || Number(row.cumulative_total_tokens || 0) >= 200000,
+        matches: row => Number(row.context_window_percent || 0) >= threshold('high_context_percent', 0.6) || Number(row.cumulative_total_tokens || 0) >= threshold('large_cumulative_tokens', 200000),
       },
       {
         key: 'cache-misses',
@@ -94,7 +95,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         sort: 'cache',
         direction: 'asc',
         caption: 'Cache misses preset',
-        matches: row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < 0.3,
+        matches: row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < threshold('low_cache_ratio', 0.3),
       },
       {
         key: 'pricing-gaps',
@@ -478,6 +479,19 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     function clamp(value, min, max) {
       return Math.min(Math.max(value, min), max);
     }
+    function threshold(key, fallback) {
+      const value = Number(actionThresholds[key]);
+      return Number.isFinite(value) ? value : fallback;
+    }
+    function topRecommendation(row) {
+      return Array.isArray(row.action_recommendations) && row.action_recommendations.length
+        ? row.action_recommendations[0]
+        : null;
+    }
+    function recommendationSummary(row) {
+      const recommendation = topRecommendation(row);
+      return recommendation ? `${recommendation.title}: ${recommendation.why}` : 'No aggregate action is flagged.';
+    }
     function signalCount(row) {
       return Array.isArray(row.efficiency_flags) ? row.efficiency_flags.length : 0;
     }
@@ -721,6 +735,50 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       if (estimated.length > 0 || rated.length < rows.length) return 'Mixed';
       return 'Official rate-card match';
     }
+    function threadLifecycle(calls) {
+      const highCost = threshold('high_cost_usd', 1);
+      const highContext = threshold('high_context_percent', 0.6);
+      let largestJump = 0;
+      let largestJumpRow = null;
+      for (let index = 1; index < calls.length; index += 1) {
+        const previous = Number(calls[index - 1].cumulative_total_tokens || 0);
+        const current = Number(calls[index].cumulative_total_tokens || 0);
+        const jump = Math.max(current - previous, Number(calls[index].total_tokens || 0), 0);
+        if (jump > largestJump) {
+          largestJump = jump;
+          largestJumpRow = calls[index];
+        }
+      }
+      const firstExpensiveIndex = calls.findIndex(row => Number(row.estimated_cost_usd || 0) >= highCost || Number(row.context_window_percent || 0) >= highContext);
+      const firstExpensiveRow = firstExpensiveIndex >= 0 ? calls[firstExpensiveIndex] : null;
+      const first = calls[0] || {};
+      const last = calls[calls.length - 1] || {};
+      const cacheTrend = Number(last.cache_ratio || 0) - Number(first.cache_ratio || 0);
+      const contextTrend = Number(last.context_window_percent || 0) - Number(first.context_window_percent || 0);
+      const spikeIndex = largestJumpRow ? calls.indexOf(largestJumpRow) : -1;
+      const subagentBeforeSpike = spikeIndex > 0 && calls.slice(0, spikeIndex).some(row => isSubagent(row) || isAutoReview(row));
+      const topAction = calls.map(topRecommendation).filter(Boolean)[0];
+      let action = topAction
+        ? topAction.action
+        : 'Expand calls or select a row for call-level recommendations.';
+      if (contextTrend >= 0.15 || Number(last.context_window_percent || 0) >= highContext) {
+        action = 'Review where context growth begins and consider starting a fresh thread.';
+      } else if (cacheTrend <= -0.25) {
+        action = 'Check for reintroduced files or tool output after cache reuse dropped.';
+      } else if (subagentBeforeSpike) {
+        action = 'Compare attached subagent or review calls before changing the parent workflow.';
+      }
+      return {
+        firstExpensiveRow,
+        firstExpensiveIndex,
+        largestJump,
+        largestJumpRow,
+        cacheTrend,
+        contextTrend,
+        subagentBeforeSpike,
+        action,
+      };
+    }
     function groupThreads(rows) {
       const map = new Map();
       for (const row of rows) {
@@ -747,6 +805,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
         const modelSummary = threadModelSummary(calls);
         const effortSummary = compactListSummary(calls.map(row => row.effort), 'efforts');
         const parentThreadLabel = dominantParentThread(calls, group.label);
+        const lifecycle = threadLifecycle(calls);
         return {
           key: group.key,
           label: group.label,
@@ -767,6 +826,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           subagentCount,
           autoReviewCount,
           attachedCount,
+          lifecycle,
           attentionScore: 0,
         };
       });
@@ -813,25 +873,27 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
           preset: 'highest-cost',
         });
       }
-      const lowCacheRows = rows.filter(row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < 0.3);
+      const lowCacheLimit = threshold('low_cache_ratio', 0.3);
+      const lowCacheRows = rows.filter(row => Number(row.input_tokens || 0) > 0 && Number(row.cache_ratio || 0) < lowCacheLimit);
       if (lowCacheRows.length) {
         const lowest = lowCacheRows.slice().sort((a, b) => Number(a.cache_ratio || 0) - Number(b.cache_ratio || 0))[0];
         insights.push({
           title: 'Low cache reuse',
           value: pct(lowest.cache_ratio),
-          body: `${number.format(lowCacheRows.length)} calls are under 30% cache reuse. Start with ${rowThreadLabel(lowest)}.`,
+          body: `${number.format(lowCacheRows.length)} calls are under ${pct(lowCacheLimit)} cache reuse. Start with ${rowThreadLabel(lowest)}.`,
           severity: 'medium',
           action: 'Apply cache-misses preset',
           preset: 'cache-misses',
         });
       }
-      const highContextRows = rows.filter(row => Number(row.context_window_percent || 0) >= 0.6);
+      const highContextLimit = threshold('high_context_percent', 0.6);
+      const highContextRows = rows.filter(row => Number(row.context_window_percent || 0) >= highContextLimit);
       if (highContextRows.length) {
         const highest = highContextRows.slice().sort((a, b) => Number(b.context_window_percent || 0) - Number(a.context_window_percent || 0))[0];
         insights.push({
           title: 'Context bloat',
           value: pct(highest.context_window_percent),
-          body: `${number.format(highContextRows.length)} calls are at or above 60% context use.`,
+          body: `${number.format(highContextRows.length)} calls are at or above ${pct(highContextLimit)} context use.`,
           severity: severityForScore(rowAttentionScore(highest)),
           action: 'Apply context-bloat preset',
           preset: 'context-bloat',
@@ -1207,6 +1269,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       return row.pricing_estimated ? 'Best-guess estimate' : 'Configured price';
     }
     function nextActionForRow(row) {
+      if (row.recommended_action) return row.recommended_action;
       if (!row.pricing_model) return 'Configure pricing before trusting cost totals.';
       if (Number(row.cache_ratio || 0) < 0.3 && Number(row.input_tokens || 0) > 0) return 'Compare fresh input with the previous turn before continuing.';
       if (Number(row.context_window_percent || 0) >= 0.6) return 'Inspect the thread timeline and consider starting a fresh thread.';
@@ -1243,6 +1306,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
             <div>
               <div class="timeline-title">${escapeHtml(sourceLabel(row))} · ${escapeHtml(short(row.model))}</div>
               <div class="timeline-meta">${escapeHtml(number.format(row.total_tokens || 0))} tokens · ${escapeHtml(money(row.estimated_cost_usd))} · ${escapeHtml(usageCreditValue(row) === null ? 'no credit rate' : `${credits(usageCreditValue(row))} credits`)} · cache ${escapeHtml(pct(row.cache_ratio))}</div>
+              <div class="timeline-meta">${escapeHtml(recommendationSummary(row))}</div>
               <div class="signal-strip">
                 <span class="flag">context ${escapeHtml(pct(contextUse))}</span>
                 <span class="flag">${escapeHtml(pricingStatusText(row))}</span>
@@ -1256,6 +1320,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
     function showDetail(row) {
       const attachment = rowAttachment(row);
       const flags = Array.isArray(row.efficiency_flags) && row.efficiency_flags.length ? row.efficiency_flags.join(', ') : 'None';
+      const whyFlagged = Array.isArray(row.flag_explanations) && row.flag_explanations.length ? row.flag_explanations.join(' ') : recommendationSummary(row);
       detailEl.innerHTML = `
         <div class="detail-stack">
           <div class="detail-card primary">
@@ -1269,6 +1334,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
               ['Context use', pct(row.context_window_percent)],
               ['Pricing status', pricingStatusText(row)],
               ['Next action', nextActionForRow(row)],
+              ['Why flagged', whyFlagged],
             ])}
           </div>
           <div class="detail-card">
@@ -1318,6 +1384,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       bindContextButtons(row);
     }
     function showThreadDetail(group) {
+      const lifecycle = group.lifecycle || {};
       detailEl.innerHTML = `
         <div class="detail-stack">
           <div class="detail-card primary">
@@ -1330,7 +1397,17 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
               ['Cache ratio', pct(group.cacheRatio)],
               ['Max context use', pct(group.maxContextUse)],
               ['Pricing status', group.pricingStatus],
-              ['Next action', group.maxContextUse >= 0.6 || group.cacheRatio < 0.3 ? 'Inspect the timeline before continuing this thread.' : 'Expand calls or select a row for call-level details.'],
+              ['Next action', lifecycle.action || (group.maxContextUse >= threshold('high_context_percent', 0.6) || group.cacheRatio < threshold('low_cache_ratio', 0.3) ? 'Inspect the timeline before continuing this thread.' : 'Expand calls or select a row for call-level details.')],
+            ])}
+          </div>
+          <div class="detail-card">
+            <h3>Thread lifecycle</h3>
+            ${fieldsList([
+              ['First expensive turn', lifecycle.firstExpensiveRow ? `${formatTimestamp(lifecycle.firstExpensiveRow.event_timestamp)} · call ${number.format((lifecycle.firstExpensiveIndex || 0) + 1)}` : 'None above thresholds'],
+              ['Largest cumulative jump', lifecycle.largestJumpRow ? `${number.format(lifecycle.largestJump)} tokens at ${formatTimestamp(lifecycle.largestJumpRow.event_timestamp)}` : 'None'],
+              ['Cache trend', `${lifecycle.cacheTrend >= 0 ? '+' : ''}${pct(lifecycle.cacheTrend || 0)}`],
+              ['Context trend', `${lifecycle.contextTrend >= 0 ? '+' : ''}${pct(lifecycle.contextTrend || 0)}`],
+              ['Subagent before spike', lifecycle.subagentBeforeSpike ? 'Yes' : 'No'],
             ])}
           </div>
           <div class="detail-card">
@@ -1384,6 +1461,7 @@ const initialPayload = JSON.parse(document.getElementById('usage-data').textCont
       parserDiagnostics = nextPayload.parser_diagnostics || {};
       apiToken = nextPayload.api_token || apiToken;
       contextApiEnabled = Boolean(nextPayload.context_api_enabled);
+      actionThresholds = nextPayload.action_thresholds || actionThresholds;
       totalAvailableRows = Number(nextPayload.total_available_rows || data.length);
       loadedLimit = payloadLimit(nextPayload);
       rebuildDashboardIndexes();

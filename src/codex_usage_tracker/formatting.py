@@ -74,6 +74,8 @@ def format_calls(rows: list[dict[str, Any]], title: str = "Most expensive Codex 
         flags = row.get("efficiency_flags") or []
         flag_suffix = f" | flags: {', '.join(flags)}" if flags else ""
         cost = _cost_suffix(row, prefix=" | estimated cost ")
+        action = row.get("recommended_action")
+        action_suffix = f" | action: {action}" if action else ""
         lines.append(
             f"{index}. {row.get('event_timestamp') or 'Unknown time'} | "
             f"{thread} | {row.get('model') or 'unknown'} "
@@ -81,7 +83,7 @@ def format_calls(rows: list[dict[str, Any]], title: str = "Most expensive Codex 
             f"last call {_fmt_int(row.get('total_tokens'))} tokens | "
             f"cache {_fmt_pct(row.get('cache_ratio'))} | "
             f"context {_fmt_pct(row.get('context_window_percent'))}"
-            f"{cost}{flag_suffix}"
+            f"{cost}{flag_suffix}{action_suffix}"
         )
     return "\n".join(lines)
 

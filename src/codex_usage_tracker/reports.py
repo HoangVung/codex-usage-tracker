@@ -18,6 +18,7 @@ from codex_usage_tracker.pricing import (
     load_pricing_config,
     summarize_pricing_coverage,
 )
+from codex_usage_tracker.recommendations import annotate_rows_with_recommendations
 from codex_usage_tracker.store import query_most_expensive_calls, query_summary
 
 
@@ -115,7 +116,7 @@ def build_summary_report(
     if preset == "expensive":
         rows = query_most_expensive_calls(db_path, limit=limit, since=since_filter)
         return SummaryReport(
-            rows=annotate_rows_with_efficiency(rows, pricing),
+            rows=annotate_rows_with_recommendations(annotate_rows_with_efficiency(rows, pricing)),
             group_by=resolved_group_by,
             is_expensive=True,
         )
@@ -148,7 +149,7 @@ def build_expensive_calls_report(
         since=resolve_since(preset, since),
     )
     return SummaryReport(
-        rows=annotate_rows_with_efficiency(rows, pricing),
+        rows=annotate_rows_with_recommendations(annotate_rows_with_efficiency(rows, pricing)),
         group_by="call",
         is_expensive=True,
     )

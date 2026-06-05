@@ -20,8 +20,13 @@ from codex_usage_tracker.paths import (
     DEFAULT_ALLOWANCE_PATH,
     DEFAULT_DASHBOARD_PATH,
     DEFAULT_PRICING_PATH,
+    DEFAULT_THRESHOLDS_PATH,
 )
 from codex_usage_tracker.pricing import annotate_rows_with_efficiency, load_pricing_config
+from codex_usage_tracker.recommendations import (
+    annotate_rows_with_recommendations,
+    load_threshold_config,
+)
 from codex_usage_tracker.store import (
     query_dashboard_event_count,
     query_dashboard_events,
@@ -38,6 +43,7 @@ def dashboard_payload(
     since: str | None = None,
     api_token: str | None = None,
     context_api_enabled: bool = False,
+    thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
 ) -> dict[str, object]:
     """Return aggregate-only dashboard data without rendering HTML."""
 
@@ -46,10 +52,12 @@ def dashboard_payload(
     )
     pricing = load_pricing_config(pricing_path)
     allowance = load_allowance_config(allowance_path)
+    thresholds = load_threshold_config(thresholds_path)
     annotated_rows = annotate_rows_with_allowance(
         annotate_rows_with_efficiency(rows, pricing),
         allowance,
     )
+    annotated_rows = annotate_rows_with_recommendations(annotated_rows, thresholds)
     allowance_summary = summarize_allowance_usage(annotated_rows, allowance)
     normalized_limit = _normalize_limit(limit)
     metadata = refresh_metadata(db_path)
@@ -74,6 +82,9 @@ def dashboard_payload(
         "parser_adapter": metadata.get("parser_adapter"),
         "api_token": api_token or "",
         "context_api_enabled": context_api_enabled,
+        "action_thresholds": thresholds.thresholds,
+        "thresholds_configured": thresholds.loaded and not thresholds.error,
+        "thresholds_error": thresholds.error,
     }
 
 
@@ -86,6 +97,7 @@ def generate_dashboard(
     since: str | None = None,
     api_token: str | None = None,
     context_api_enabled: bool = False,
+    thresholds_path: Path = DEFAULT_THRESHOLDS_PATH,
 ) -> Path:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     guide_href = _dashboard_guide_href(output_path)
@@ -101,6 +113,7 @@ def generate_dashboard(
             since=since,
             api_token=api_token,
             context_api_enabled=context_api_enabled,
+            thresholds_path=thresholds_path,
         ),
         ensure_ascii=True,
     ).replace("</", "<\\/")

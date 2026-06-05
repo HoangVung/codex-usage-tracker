@@ -20,6 +20,8 @@ For optional allowance context, initialize a local template and copy values from
 codex-usage-tracker init-allowance
 ```
 
+To tune review thresholds locally, run `codex-usage-tracker init-thresholds` and edit `~/.codex-usage-tracker/thresholds.json`. These thresholds control low-cache, high-context, high-uncached-input, large-thread, reasoning-spike, low-output, and high-cost recommendations.
+
 The server keeps the HTML aggregate-only and enables two live features:
 
 - `Refresh` rescans local Codex logs and updates the dashboard rows.
@@ -62,6 +64,7 @@ Use `Calls` view when you want to inspect individual model calls.
 - Click a column header like `Time`, `Thread`, `Tokens`, `Cost`, or `Cache` to sort. Use the sort menu for `Highest Codex credits`. Click the same header again to reverse the direction.
 - Hover or click a row to pin its aggregate fields in `Call Details`; on desktop, the details panel stays visible as you scroll.
 - The `Call Details` panel groups primary cost, Codex credit, allowance, cache, context, and pricing signals first, then thread narrative and token breakdowns.
+- The first detail section includes a recommended action and a "why flagged" explanation derived only from aggregate counters and pricing/allowance metadata.
 - Raw aggregate identifiers and source file metadata are collapsed until you need them.
 - The details panel always reserves a visible scrollbar so long field lists are discoverable before you start scrolling.
 - Pagination appears only when the active Insights, Calls, or Threads view has more than one page.
@@ -108,6 +111,7 @@ For selected calls, the panel shows:
 For selected threads, the panel shows:
 
 - estimated cost, Codex credits, allowance impact, attention score, cache ratio, max context use, pricing status, and next action
+- lifecycle signals: first expensive turn, largest cumulative jump, cache trend, context trend, and whether subagent or auto-review work appeared before a usage spike
 - a compact thread timeline with recent calls, cost, credits, cache, context, and pricing cues
 - direct, subagent, auto-review, attached-call, and spawned-thread relationship counts
 
