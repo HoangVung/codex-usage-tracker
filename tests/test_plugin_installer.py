@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 
 import pytest
@@ -89,6 +90,25 @@ def test_install_plugin_preserves_requested_relative_python(tmp_path: Path, monk
     )
 
 
+def test_install_plugin_adds_pythonpath_for_source_checkout_venv(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    python_path = repo_root / ".venv" / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+    (repo_root / "src" / "codex_usage_tracker").mkdir(parents=True)
+    (repo_root / "pyproject.toml").write_text("[project]\nname = 'sample'\n", encoding="utf-8")
+    plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
+
+    install_plugin(
+        plugin_dir=plugin_dir,
+        marketplace_path=tmp_path / "marketplace.json",
+        python_executable=python_path,
+    )
+
+    mcp_config = json.loads((plugin_dir / ".mcp.json").read_text())
+    server = mcp_config["mcpServers"]["codex-usage-tracker"]
+
+    assert server["env"] == {"PYTHONPATH": str(repo_root / "src")}
+
+
 def test_install_plugin_force_replaces_existing_symlink(tmp_path: Path) -> None:
     source_plugin = tmp_path / "source"
     source_plugin.mkdir()
@@ -139,10 +159,11 @@ def test_uninstall_plugin_refuses_unrelated_path(tmp_path: Path) -> None:
 def test_doctor_accepts_generated_plugin_directory(tmp_path: Path) -> None:
     plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
     marketplace_path = tmp_path / "marketplace.json"
+    python_path = _fake_python(tmp_path)
     install_plugin(
         plugin_dir=plugin_dir,
         marketplace_path=marketplace_path,
-        python_executable=tmp_path / ".venv" / "bin" / "python",
+        python_executable=python_path,
     )
 
     report = run_doctor(
@@ -160,3 +181,41 @@ def test_doctor_accepts_generated_plugin_directory(tmp_path: Path) -> None:
     assert str(plugin_dir) in checks["Plugin root"]["detail"]
     assert checks["Plugin registration"]["status"] == "pass"
     assert checks["MCP config"]["status"] == "pass"
+    assert checks["MCP runtime"]["status"] == "pass"
+
+
+def test_doctor_detects_mcp_python_that_cannot_import_server(tmp_path: Path) -> None:
+    plugin_dir = tmp_path / "plugins" / "codex-usage-tracker"
+    marketplace_path = tmp_path / "marketplace.json"
+    python_path = _fake_python(tmp_path, exit_code=1)
+    install_plugin(
+        plugin_dir=plugin_dir,
+        marketplace_path=marketplace_path,
+        python_executable=python_path,
+    )
+
+    report = run_doctor(
+        codex_home=tmp_path / ".codex",
+        db_path=tmp_path / "usage.sqlite3",
+        dashboard_path=tmp_path / "dashboard.html",
+        pricing_path=tmp_path / "pricing.json",
+        plugin_link=plugin_dir,
+        marketplace_path=marketplace_path,
+        repo_root=None,
+        suggest_repair=True,
+    )
+    checks = {check["name"]: check for check in report["checks"]}
+
+    assert report["status"] == "fail"
+    assert checks["MCP runtime"]["status"] == "fail"
+    assert "cannot import the server" in checks["MCP runtime"]["detail"]
+    assert any("install-plugin --python .venv/bin/python --force" in suggestion for suggestion in report["repair_suggestions"])
+
+
+def _fake_python(tmp_path: Path, *, exit_code: int = 0) -> Path:
+    if os.name == "nt":
+        pytest.skip("fake shell Python is only used on POSIX test runners")
+    path = tmp_path / f"python-{exit_code}"
+    path.write_text(f"#!/bin/sh\nexit {exit_code}\n", encoding="utf-8")
+    path.chmod(0o755)
+    return path

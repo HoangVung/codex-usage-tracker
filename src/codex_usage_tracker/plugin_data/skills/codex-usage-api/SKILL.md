@@ -17,28 +17,31 @@ The only exception is `usage_call_context`, which reads one selected record's lo
 
 ## First Steps
 
-1. Refresh before analysis with `refresh_usage_index` unless the user asks for a static historical snapshot. Keep archived sessions excluded unless the user explicitly asks for all history.
-2. Use `usage_doctor(response_format="json")` when setup, indexing, pricing, MCP discovery, or dashboard freshness is uncertain.
-3. Prefer JSON responses for analysis:
+1. For normal usage questions, do not inspect repository files, plugin manifests, or local logs first. Start with the aggregate MCP tools. If MCP tools are unavailable, use the CLI JSON fallback below.
+2. Refresh before analysis with `refresh_usage_index` unless the user asks for a static historical snapshot. Keep archived sessions excluded unless the user explicitly asks for all history.
+3. Use `usage_doctor(response_format="json")` when setup, indexing, pricing, MCP discovery, or dashboard freshness is uncertain.
+4. Prefer JSON responses for analysis:
    - `usage_summary(..., response_format="json")`
    - `session_usage(..., response_format="json")`
    - `most_expensive_usage_calls(..., response_format="json")`
    - `usage_recommendations(..., response_format="json")`
    - `usage_pricing_coverage(..., response_format="json")`
    - `usage_query(...)`
-4. Check the top-level `schema` field before interpreting structured output. Known schema ids are documented in `docs/cli-json-schemas.md`.
-5. If MCP tools are unavailable, fall back to the CLI equivalents:
+5. Check the top-level `schema` field before interpreting structured output. Known schema ids are documented in `docs/cli-json-schemas.md`.
+6. If MCP tools are unavailable, fall back to the CLI equivalents:
    - `codex-usage-tracker refresh --json`
-   - `codex-usage-tracker summary --json`
+   - `codex-usage-tracker summary --group-by thread --json`
    - `codex-usage-tracker query`
    - `codex-usage-tracker session --json`
    - `codex-usage-tracker expensive --json`
    - `codex-usage-tracker recommendations --json`
    - `codex-usage-tracker pricing-coverage --json`
+7. If the `codex-usage-tracker` command is missing, run `codex-usage-tracker doctor --suggest-repair --json` only if the command is available through an absolute path or known environment. Otherwise report that the CLI is not on `PATH` and ask the user to run `codex-usage-tracker setup` or reinstall with `pipx`.
+8. Use source-checkout fallbacks only when you are already inside the repo checkout: `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli <command>`. Do not use `PYTHONPATH=src` outside that checkout, and do not keep exploring plugin files after a setup failure.
 
 ## Routing Questions To API Calls
 
-- "What used the most?" Use `most_expensive_usage_calls(response_format="json")` and `usage_summary(group_by="thread", response_format="json")`.
+- "What used the most?" Use `usage_summary(group_by="thread", response_format="json")` first for thread totals, then `most_expensive_usage_calls(response_format="json")` for supporting calls.
 - "Which project/thread/model is driving usage?" Use `usage_summary` grouped by `project`, `thread`, or `model`.
 - "Can I share this?" Use redacted or strict privacy mode and avoid `usage_call_context`.
 - "Why did usage spike?" Use `usage_recommendations(response_format="json")` first for ranked causes, then `usage_query` with `since`, `project`, `thread`, `model`, `effort`, `min_tokens`, or `min_credits` for supporting rows.

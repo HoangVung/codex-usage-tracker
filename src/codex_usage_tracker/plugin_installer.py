@@ -231,15 +231,30 @@ def plugin_manifest() -> dict[str, Any]:
 
 
 def _mcp_config(python_executable: Path) -> dict[str, Any]:
-    return {
-        "mcpServers": {
-            PLUGIN_NAME: {
-                "command": str(python_executable),
-                "args": ["-m", "codex_usage_tracker.mcp_server"],
-                "cwd": ".",
-            }
-        }
+    server: dict[str, Any] = {
+        "command": str(python_executable),
+        "args": ["-m", "codex_usage_tracker.mcp_server"],
+        "cwd": ".",
     }
+    source_root = _source_checkout_for_python(python_executable)
+    if source_root:
+        server["env"] = {"PYTHONPATH": str(source_root / "src")}
+    return {"mcpServers": {PLUGIN_NAME: server}}
+
+
+def _source_checkout_for_python(python_executable: Path) -> Path | None:
+    """Return a source checkout root when the Python executable lives in its venv."""
+
+    path = python_executable.expanduser()
+    parents = list(path.parents)
+    if len(parents) < 3:
+        return None
+    candidate = parents[2]
+    if (candidate / "src" / "codex_usage_tracker").is_dir() and (
+        candidate / "pyproject.toml"
+    ).exists():
+        return candidate
+    return None
 
 
 def _load_marketplace(path: Path) -> dict[str, Any]:

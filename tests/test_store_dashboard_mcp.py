@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import sys
 import threading
 import urllib.error
 import urllib.request
@@ -1043,8 +1044,11 @@ def test_pricing_annotation_and_doctor_pass(tmp_path: Path) -> None:
             {
                 "mcpServers": {
                     "codex-usage-tracker": {
-                        "command": "/usr/bin/python3",
+                        "command": sys.executable,
                         "args": ["-m", "codex_usage_tracker.mcp_server"],
+                        "env": {
+                            "PYTHONPATH": str(Path(__file__).resolve().parents[1] / "src")
+                        },
                     }
                 }
             }

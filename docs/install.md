@@ -89,6 +89,8 @@ For a source checkout that should use the repo-local virtual environment:
 codex-usage-tracker install-plugin --python .venv/bin/python
 ```
 
+When the selected Python is a repo-local virtual environment, the generated MCP config includes a `PYTHONPATH` pointing at that checkout's `src` directory. That keeps source-checkout plugin installs working even before an editable install. `doctor --suggest-repair` validates that the configured MCP Python can import the server.
+
 If you previously installed the older source-checkout symlink, replace it once:
 
 ```bash
