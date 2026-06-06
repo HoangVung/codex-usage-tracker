@@ -32,10 +32,10 @@ The plugin installs two companion skills. They are local instruction files that 
 Good prompts for the API companion skill:
 
 ```text
-Open my Codex usage dashboard.
+Open dashboard.
 Use my Codex Usage Tracker data to explain what drove usage this week.
-Which chat thread is using the most tokens?
-Give me a leaderboard of my threads by usage.
+Heaviest thread?
+Thread leaderboard.
 Find low-cache or high-context calls from today and suggest what to inspect next.
 Compare usage by project for the last 7 days.
 Show me what is estimated or unpriced before I trust the cost numbers.

@@ -1,7 +1,7 @@
 # Codex Usage Tracker
 
 <p align="center">
-  <a href="docs/assets/plugin-prompts.png"><img src="docs/assets/plugin-prompts.png?v=usage-prompts" alt="Codex Usage Tracker companion prompts for opening the dashboard, finding the heaviest thread, and showing a thread leaderboard." width="49%"></a>
+  <a href="docs/assets/plugin-prompts.png"><img src="docs/assets/plugin-prompts.png?v=short-prompts" alt="Codex Usage Tracker companion prompts for opening the dashboard, finding the heaviest thread, and showing a thread leaderboard." width="49%"></a>
   <a href="docs/assets/dashboard-calls.png"><img src="docs/assets/dashboard-calls-preview.png?v=usage-dashboard" alt="Codex Usage Tracker dashboard showing filters, usage totals, call rows, and call details." width="49%"></a>
 </p>
 

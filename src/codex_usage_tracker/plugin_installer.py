@@ -211,9 +211,9 @@ def plugin_manifest() -> dict[str, Any]:
             "privacyPolicyURL": "https://github.com/douglasmonsky/codex-usage-tracker",
             "termsOfServiceURL": "https://github.com/douglasmonsky/codex-usage-tracker",
             "defaultPrompt": [
-                "Open my Codex usage dashboard",
-                "Which chat thread is using the most tokens?",
-                "Give me a leaderboard of my threads by usage",
+                "Open dashboard",
+                "Heaviest thread?",
+                "Thread leaderboard",
             ],
             "brandColor": "#2563EB",
             "composerIcon": "./assets/icon.svg",

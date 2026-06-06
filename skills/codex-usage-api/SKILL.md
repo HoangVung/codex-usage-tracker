@@ -17,18 +17,20 @@ The only exception is `usage_call_context`, which reads one selected record's lo
 
 ## First Steps
 
-1. For normal usage questions, do not inspect repository files, plugin manifests, or local logs first. Start with the aggregate MCP tools. If MCP tools are unavailable, use the CLI JSON fallback below.
-2. Refresh before analysis with `refresh_usage_index` unless the user asks for a static historical snapshot. Keep archived sessions excluded unless the user explicitly asks for all history.
-3. Use `usage_doctor(response_format="json")` when setup, indexing, pricing, MCP discovery, or dashboard freshness is uncertain.
-4. Prefer JSON responses for analysis:
+1. For "Open dashboard" or similar dashboard-open requests, do not inspect repository files, plugin manifests, tool registries, git status, or local logs first. Run `codex-usage-tracker open-dashboard --refresh` immediately, then report the opened path or a brief failure.
+2. For "Heaviest thread?", "Thread leaderboard", or similar thread-ranking requests, do not inspect repository files, SQLite schemas, plugin manifests, process lists, dashboard servers, or local logs manually. Refresh the aggregate index, then call `usage_summary(group_by="thread", limit=10, response_format="json")`. If MCP tools are unavailable, run `codex-usage-tracker refresh --json` and `codex-usage-tracker summary --group-by thread --limit 10 --json`.
+3. For normal usage questions, do not inspect repository files, plugin manifests, or local logs first. Start with the aggregate MCP tools. If MCP tools are unavailable, use the CLI JSON fallback below.
+4. Refresh before analysis with `refresh_usage_index` unless the user asks for a static historical snapshot. Keep archived sessions excluded unless the user explicitly asks for all history.
+5. Use `usage_doctor(response_format="json")` when setup, indexing, pricing, MCP discovery, or dashboard freshness is uncertain.
+6. Prefer JSON responses for analysis:
    - `usage_summary(..., response_format="json")`
    - `session_usage(..., response_format="json")`
    - `most_expensive_usage_calls(..., response_format="json")`
    - `usage_recommendations(..., response_format="json")`
    - `usage_pricing_coverage(..., response_format="json")`
    - `usage_query(...)`
-5. Check the top-level `schema` field before interpreting structured output. Known schema ids are documented in `docs/cli-json-schemas.md`.
-6. If MCP tools are unavailable, fall back to the CLI equivalents:
+7. Check the top-level `schema` field before interpreting structured output. Known schema ids are documented in `docs/cli-json-schemas.md`.
+8. If MCP tools are unavailable, fall back to the CLI equivalents:
    - `codex-usage-tracker refresh --json`
    - `codex-usage-tracker summary --group-by thread --json`
    - `codex-usage-tracker query`
@@ -36,8 +38,8 @@ The only exception is `usage_call_context`, which reads one selected record's lo
    - `codex-usage-tracker expensive --json`
    - `codex-usage-tracker recommendations --json`
    - `codex-usage-tracker pricing-coverage --json`
-7. If the `codex-usage-tracker` command is missing, run `codex-usage-tracker doctor --suggest-repair --json` only if the command is available through an absolute path or known environment. Otherwise report that the CLI is not on `PATH` and ask the user to run `codex-usage-tracker setup` or reinstall with `pipx`.
-8. Use source-checkout fallbacks only when you are already inside the repo checkout: `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli <command>`. Do not use `PYTHONPATH=src` outside that checkout, and do not keep exploring plugin files after a setup failure.
+9. If the `codex-usage-tracker` command is missing, run `codex-usage-tracker doctor --suggest-repair --json` only if the command is available through an absolute path or known environment. Otherwise report that the CLI is not on `PATH` and ask the user to run `codex-usage-tracker setup` or reinstall with `pipx`.
+10. Use source-checkout fallbacks only when you are already inside the repo checkout: `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli <command>`. Do not use `PYTHONPATH=src` outside that checkout, and do not keep exploring plugin files after a setup failure.
 
 ## Routing Questions To API Calls
 
@@ -53,6 +55,7 @@ The only exception is `usage_call_context`, which reads one selected record's lo
 ## Answer Style
 
 - Lead with the direct answer and the key metric.
+- For default prompt workflows, use at most one short progress update such as "Refreshing aggregate usage, then ranking threads." Avoid narrating tool discovery, process inspection, SQLite schema inspection, or plugin-file lookup.
 - Name the data scope, such as time window, project, thread, model, row count, and whether rows were truncated.
 - Separate exact facts from estimates. Call out `pricing_estimated`, missing `pricing_model`, `usage_credit_confidence`, and missing allowance windows.
 - Include the next useful investigation when the answer depends on unclear pricing, stale allowance values, or a broad time window.

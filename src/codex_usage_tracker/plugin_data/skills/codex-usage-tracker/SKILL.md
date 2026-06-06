@@ -15,6 +15,17 @@ The index, dashboard payload, CSV export, and normal summaries are aggregate-onl
 
 The only exception is `usage_call_context`, which intentionally reads one selected record's source JSONL on demand. It requires `CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1` in the MCP server environment. Use it only when the user explicitly asks to inspect actual context, and mention that returned text is local, redacted, size-limited, and not persisted by the tracker.
 
+## Fast Paths
+
+- For "Open dashboard" or similar dashboard-open requests, do not inspect repository files, plugin manifests, tool registries, git status, or local logs first. Run `codex-usage-tracker open-dashboard --refresh` immediately.
+- For "Heaviest thread?", "Thread leaderboard", or similar thread-ranking requests, do not inspect repository files, SQLite schemas, plugin manifests, process lists, dashboard servers, or local logs manually. Use the tracker API: refresh the aggregate index, then rank threads with `usage_summary(group_by="thread", limit=10, response_format="json")`.
+- If MCP tools are unavailable for thread-ranking requests, run `codex-usage-tracker refresh --json` and `codex-usage-tracker summary --group-by thread --limit 10 --json`. The summary is already ordered by `total_tokens` descending.
+- Answer thread-ranking requests directly from the summary rows. For the heaviest-thread question, lead with the first row's thread and total tokens; for leaderboard requests, show a compact ranked list.
+- If the CLI command is missing for open-dashboard requests and you are already inside the source checkout, use `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli open-dashboard --refresh`.
+- If the CLI command is missing for thread-ranking requests and you are already inside the source checkout, use `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli refresh --json` and `PYTHONPATH=src .venv/bin/python -m codex_usage_tracker.cli summary --group-by thread --limit 10 --json`.
+- If neither command is available, say briefly that the tracker CLI is not on `PATH` and ask the user to run `codex-usage-tracker setup` or reinstall with `pipx`.
+- Keep open-dashboard narration minimal: one short progress note if needed, then the opened path or the failure. Do not narrate plugin discovery.
+
 ## Common Workflows
 
 - Refresh the index before answering usage questions.
