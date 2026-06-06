@@ -35,6 +35,11 @@ def test_install_plugin_writes_generated_wrapper_and_marketplace(tmp_path: Path)
     assert second.replaced_existing is False
     assert manifest["name"] == "codex-usage-tracker"
     assert manifest["version"] == "0.2.0"
+    assert manifest["interface"]["defaultPrompt"][:3] == [
+        "Open my Codex usage dashboard",
+        "Which chat thread is using the most tokens?",
+        "Give me a leaderboard of my threads by usage",
+    ]
     assert (plugin_dir / "assets" / "icon.svg").exists()
     assert (plugin_dir / "skills" / "codex-usage-api" / "SKILL.md").exists()
     assert (plugin_dir / "skills" / "codex-usage-tracker" / "SKILL.md").exists()

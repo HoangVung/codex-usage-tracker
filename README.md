@@ -1,5 +1,10 @@
 # Codex Usage Tracker
 
+<p align="center">
+  <a href="docs/assets/plugin-prompts.png"><img src="docs/assets/plugin-prompts.png?v=usage-prompts" alt="Codex Usage Tracker companion prompts for opening the dashboard, finding the heaviest thread, and showing a thread leaderboard." width="49%"></a>
+  <a href="docs/assets/dashboard-calls.png"><img src="docs/assets/dashboard-calls-preview.png?v=usage-dashboard" alt="Codex Usage Tracker dashboard showing filters, usage totals, call rows, and call details." width="49%"></a>
+</p>
+
 Local-first dashboard for understanding where your Codex tokens and usage credits are going.
 
 [![CI](https://github.com/douglasmonsky/codex-usage-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/douglasmonsky/codex-usage-tracker/actions/workflows/ci.yml)
@@ -62,7 +67,7 @@ Insights still gives a fast triage layer for costly threads, low cache reuse, co
 
 ![Insights view with ranked Needs Attention cards, investigation presets, and top threads by attention score.](docs/assets/dashboard-insights.png?v=4a40e4f)
 
-These screenshots use synthetic aggregate fixture data. They do not contain prompts, assistant responses, tool output, or real Codex session content. See the [Dashboard Guide](docs/dashboard-guide.md) for the full walkthrough.
+The dashboard screenshots use synthetic aggregate fixture data, and the companion prompt preview is synthetic. They do not contain prompts from local logs, assistant responses, tool output, or real Codex session content. See the [Dashboard Guide](docs/dashboard-guide.md) for the full walkthrough.
 
 If this helped you track Codex usage, starring the repo helps others find it. Issues and feature requests are welcome.
 
