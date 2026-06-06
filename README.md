@@ -12,19 +12,25 @@ Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggre
 
 Built for developers using Codex locally who want to know which threads, models, subagents, and long chats are driving usage without uploading logs anywhere.
 
-After install, you get a localhost dashboard, a local SQLite aggregate index, CLI reports, and MCP tools for Codex-assisted analysis.
+After install, you get a localhost dashboard, a local SQLite aggregate index, CLI reports, MCP tools, and a companion Codex skill for asking questions like "what drove my usage this week?"
 
 ## Quick Install
 
 ```bash
-brew install pipx
-pipx ensurepath
-pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+python -m pip install --user pipx
+python -m pipx ensurepath
+python -m pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
 codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
 
+Use your normal Python launcher for your platform: `python3` is common on macOS/Linux, and `py` may be preferable on Windows. On macOS with Homebrew, `brew install pipx` is also fine.
+
 `setup` installs or refreshes the local Codex plugin wrapper, initializes local config templates when needed, refreshes the aggregate index, runs `codex-usage-tracker doctor`, and tells you whether Codex needs a restart for plugin discovery.
+
+Want Codex to do it for you? Paste: `Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker, then run setup and open the dashboard.`
+
+After plugin discovery, Codex can use the companion usage skill to refresh local aggregates, call the MCP tools, and explain usage patterns conversationally. Examples: [MCP And Codex Skills](docs/mcp.md).
 
 If you only want plugin registration after installing the package:
 
@@ -33,6 +39,10 @@ codex-usage-tracker install-plugin
 ```
 
 More install paths: [Install Guide](docs/install.md).
+
+## Platform Support
+
+The core app is not macOS-only. The CLI, SQLite index, dashboard generator, and localhost server are Python-based and CI-tested on Ubuntu for Python 3.10-3.13. It defaults to `~/.codex` for local Codex logs and `~/.codex-usage-tracker` for tracker data; pass `--codex-home` or `--db` when your local layout differs. Codex plugin discovery depends on Codex's local plugin directories on your machine, so run `codex-usage-tracker doctor` after setup if plugin registration does not appear in Codex.
 
 ## Dashboard Preview
 
@@ -68,6 +78,7 @@ Use it to answer:
 - Are subagents or auto-review passes adding unexpected cost?
 - Which calls have low cache reuse, high context pressure, reasoning spikes, or pricing gaps?
 - Which projects, project tags, or active directories are consuming the most usage?
+- What should Codex inspect next using the companion usage skill?
 
 ## Long Chats Can Bloat Fast
 
@@ -173,7 +184,7 @@ Open a Codex session on your machine and paste this:
 
 ```text
 Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
-Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
+Use pipx if it is available. If pipx is missing, install it with the platform's Python launcher or use a local virtual environment.
 After installation, run codex-usage-tracker setup and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
 ```

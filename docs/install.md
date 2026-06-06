@@ -2,17 +2,35 @@
 
 ## Recommended Install
 
+Use `pipx` so the tracker is installed as a command-line app without mixing dependencies into another project.
+
 ```bash
-brew install pipx
-pipx ensurepath
-pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+python -m pip install --user pipx
+python -m pipx ensurepath
+python -m pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
 codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
 
-`setup` installs or refreshes the package-owned plugin wrapper, initializes local config templates when needed, refreshes the aggregate index, runs `doctor`, prints a success/failure summary, and tells you whether Codex needs a restart for plugin discovery.
+Use the Python launcher that is normal for your platform:
+
+- macOS/Linux: `python3` may be the right command instead of `python`.
+- Windows: `py -m pip install --user pipx`, `py -m pipx ensurepath`, and `py -m pipx install ...`.
+- macOS with Homebrew: `brew install pipx` is a convenient alternative to `python -m pip install --user pipx`.
+
+If `codex-usage-tracker` is not found immediately after `ensurepath`, open a new terminal or add the printed pipx binary directory to `PATH`.
+
+`setup` installs or refreshes the package-owned plugin wrapper, including MCP tools and companion Codex skills, initializes local config templates when needed, refreshes the aggregate index, runs `doctor`, prints a success/failure summary, and tells you whether Codex needs a restart for plugin discovery.
 
 Restart Codex after plugin registration if you want Codex to discover the MCP tools in a fresh session. The localhost dashboard can run immediately.
+
+## Platform Support
+
+The CLI, SQLite index, dashboard generator, and localhost server are Python-based and are not macOS-only. CI runs the package on Ubuntu with Python 3.10, 3.11, 3.12, and 3.13.
+
+By default the tracker looks for Codex JSONL logs under `~/.codex`, stores its own database/config under `~/.codex-usage-tracker`, and writes the local plugin wrapper under `~/plugins/codex-usage-tracker`. Override paths with `--codex-home`, `--db`, `--plugin-dir`, or `--marketplace` if your platform or Codex installation uses a different layout.
+
+Windows support should work for the core dashboard/CLI when Codex writes readable JSONL logs, but plugin discovery is tied to Codex's local plugin directory behavior. Run `codex-usage-tracker doctor --suggest-repair` after setup if Codex does not show the plugin.
 
 ## Upgrade
 
@@ -34,12 +52,14 @@ Open a Codex session on your machine and paste:
 
 ```text
 Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
-Use pipx if it is available. If pipx is missing, install it with Homebrew or use a local virtual environment.
+Use pipx if it is available. If pipx is missing, install it with the platform's Python launcher or use a local virtual environment.
 After installation, run codex-usage-tracker setup and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
 ```
 
 Codex should run roughly the same shell commands as the recommended install. This path is useful if you want Codex to verify the dashboard URL and plugin discovery state for you.
+
+After Codex discovers the plugin, you can ask usage questions directly in a Codex session. The `codex-usage-api` companion skill guides Codex to refresh the aggregate index, query stable local JSON/MCP outputs, and explain usage patterns without storing prompts or raw transcript text. See [MCP And Codex Skills](mcp.md) for example prompts.
 
 ## Source Checkout
 
