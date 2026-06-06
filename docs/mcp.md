@@ -1,0 +1,77 @@
+# MCP And Codex Skills
+
+Codex Usage Tracker can be installed as a local Codex plugin and exposes MCP tools for aggregate usage analysis.
+
+## Local Plugin
+
+After installing the Python package, register the plugin:
+
+```bash
+codex-usage-tracker install-plugin
+```
+
+For a source checkout:
+
+```bash
+codex-usage-tracker install-plugin --python .venv/bin/python
+```
+
+Restart Codex after registration so it can discover the plugin.
+
+Marketplace installs use the bundled MCP launcher at `skills/codex-usage-tracker/scripts/run_mcp.py`. On first MCP startup it creates a cached runtime under `~/.cache/codex-usage-tracker/mcp-runtime/` and installs the Python package from GitHub, so it does not require a `.venv` inside the plugin directory.
+
+The launcher stores the GitHub package spec used for that runtime and reinstalls when the bundled package pin changes. Set `CODEX_USAGE_TRACKER_PACKAGE_SPEC` to test a different Git ref or `CODEX_USAGE_TRACKER_RUNTIME_DIR` to use a separate cache while debugging plugin startup.
+
+## Companion Skills
+
+The plugin installs two companion skills. They are local instruction files that help Codex use this package; they do not create another hosted service or send usage data outside the machine.
+
+- `codex-usage-tracker`: operational setup and direct tracker work, including refresh, dashboards, CSV export, doctor checks, and MCP tools.
+- `codex-usage-api`: conversational usage analysis using stable aggregate JSON first.
+
+Good prompts for the API companion skill:
+
+```text
+Use my Codex Usage Tracker data to explain what drove usage this week.
+Which threads used the most Codex credits and why?
+Find low-cache or high-context calls from today and suggest what to inspect next.
+Compare usage by project for the last 7 days.
+Show me what is estimated or unpriced before I trust the cost numbers.
+```
+
+The API skill should refresh the local index, call aggregate tools such as `usage_summary`, `usage_query`, `session_usage`, `usage_recommendations`, `most_expensive_usage_calls`, or `usage_pricing_coverage`, then explain the answer with the data scope and estimate caveats.
+
+If MCP tools are not available, the same questions can be answered through CLI JSON commands documented in [CLI And MCP JSON Schemas](cli-json-schemas.md).
+
+The companion skill cannot read your logged-in Codex account plan, native remaining allowance, or usage from other agentic surfaces. Remaining allowance context is only as accurate as the values you manually copy into `~/.codex-usage-tracker/allowance.json`.
+
+## Tools
+
+- `refresh_usage_index`
+- `usage_doctor`
+- `usage_summary`
+- `usage_query`
+- `usage_recommendations`
+- `session_usage`
+- `usage_call_context`
+- `most_expensive_usage_calls`
+- `usage_pricing_coverage`
+- `generate_usage_dashboard`
+- `export_usage_csv`
+- `init_usage_pricing_config`
+- `update_usage_pricing_config`
+- `init_usage_allowance_config`
+
+`usage_doctor`, `usage_summary`, `usage_recommendations`, `session_usage`, `most_expensive_usage_calls`, and `usage_pricing_coverage` accept `response_format="json"` when an agent needs stable structured output instead of markdown.
+
+`refresh_usage_index`, `usage_query`, `generate_usage_dashboard`, `export_usage_csv`, and config-writing MCP tools return JSON dictionaries directly.
+
+## Raw Context Guard
+
+`usage_call_context` is disabled by default in MCP server processes. To enable it explicitly:
+
+```bash
+CODEX_USAGE_TRACKER_ALLOW_RAW_CONTEXT=1
+```
+
+Normal aggregate tools do not need this variable. Keep raw context disabled unless the user specifically asks to inspect local log context.

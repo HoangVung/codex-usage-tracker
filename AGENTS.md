@@ -34,7 +34,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 - `scripts/check_release.py` - release-readiness checks for docs, versions, packaging, wheel contents, and tracked secret patterns.
 - `.github/workflows/ci.yml` - GitHub Actions test and package build workflow.
 - `.github/workflows/pricing-compat.yml` - scheduled/manual non-blocking live pricing parser compatibility check.
-- `docs/dashboard-guide.md`, `docs/architecture.md`, and `docs/assets/` - usage guide, architecture notes, and screenshots built from synthetic aggregate fixture data.
+- `docs/` - install, dashboard, CLI, pricing/credits, MCP, privacy, architecture, development, JSON-schema docs, and screenshots built from synthetic aggregate fixture data.
 - `tests/` - synthetic fixtures and unit tests.
 
 ## Setup
