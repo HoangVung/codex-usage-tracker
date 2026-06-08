@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.3.1 - 2026-06-08
+
+- Fix packaged Codex Usage Tracker skills so dashboard-open requests start the live localhost dashboard instead of a static snapshot.
+- Mirror live-dashboard skill guidance between source-tree skills and packaged plugin-data copies so release and wheel checks stay green.
+- Use the valid explicit context API flag form, `serve-dashboard --refresh --context-api explicit --open`, for live dashboard launches.
+
 ## 0.3.0 - 2026-06-08
 
 0.3.0 is a stabilization and public-preview release for the dashboard, CLI, MCP tools, local privacy model, packaged Codex plugin, and companion usage skills. The PyPI/TestPyPI distribution name is now `codex-usage-tracking`; the GitHub repository remains `douglasmonsky/codex-usage-tracker`, the Python import package remains `codex_usage_tracker`, and the installed CLI command remains `codex-usage-tracker`.

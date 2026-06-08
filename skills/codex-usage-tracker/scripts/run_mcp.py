@@ -17,7 +17,7 @@ PACKAGE_SPEC = os.environ.get(
     "CODEX_USAGE_TRACKER_PACKAGE_SPEC",
     "git+https://github.com/douglasmonsky/codex-usage-tracker.git@a95af5b3c421177eb133cc8322abee98e71bc434",
 )
-RUNTIME_VERSION = "0.3.0"
+RUNTIME_VERSION = "0.3.1"
 PACKAGE_SPEC_MARKER = ".codex-usage-tracker-package-spec"
 MODULE_CHECK = (
     "import importlib.metadata; "
