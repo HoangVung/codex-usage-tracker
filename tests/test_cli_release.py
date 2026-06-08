@@ -68,6 +68,38 @@ def test_readme_codex_usage_tracker_commands_reference_known_subcommands() -> No
     } <= documented
 
 
+def test_usage_skills_prefer_live_dashboard_for_open_requests() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    skill_paths = [
+        repo_root / "skills" / "codex-usage-api" / "SKILL.md",
+        repo_root / "skills" / "codex-usage-tracker" / "SKILL.md",
+        repo_root
+        / "src"
+        / "codex_usage_tracker"
+        / "plugin_data"
+        / "skills"
+        / "codex-usage-api"
+        / "SKILL.md",
+        repo_root
+        / "src"
+        / "codex_usage_tracker"
+        / "plugin_data"
+        / "skills"
+        / "codex-usage-tracker"
+        / "SKILL.md",
+    ]
+
+    for skill_path in skill_paths:
+        skill_text = skill_path.read_text(encoding="utf-8")
+        live_command_index = skill_text.find("serve-dashboard --refresh --open")
+        static_command_index = skill_text.find("open-dashboard --refresh")
+
+        assert live_command_index != -1, skill_path
+        assert static_command_index != -1, skill_path
+        assert live_command_index < static_command_index, skill_path
+        assert "Live requires `serve-dashboard`" in skill_text
+
+
 def test_cli_json_schema_doc_lists_tracked_contracts() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     docs = (repo_root / "docs" / "cli-json-schemas.md").read_text(encoding="utf-8")
