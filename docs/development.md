@@ -119,10 +119,11 @@ The release checker verifies version alignment, required public docs, packaged p
 
 Publishing uses GitHub Actions Trusted Publishing through `.github/workflows/publish.yml`; do not upload from a local machine and do not add PyPI or TestPyPI API tokens.
 
-The first public package release, `0.3.0`, was published on June 8, 2026. Patch release `0.3.1` followed the same day to ship the live-dashboard skill launch fix:
+The first public package release, `0.3.0`, was published on June 8, 2026. Patch release `0.3.1` followed the same day to ship the live-dashboard skill launch fix. Patch release `0.3.2` made dashboard launch refresh the default and added runtime enablement for context loading:
 
 - GitHub Release: `https://github.com/douglasmonsky/codex-usage-tracker/releases/tag/v0.3.0`
 - GitHub Release: `https://github.com/douglasmonsky/codex-usage-tracker/releases/tag/v0.3.1`
+- GitHub Release: `https://github.com/douglasmonsky/codex-usage-tracker/releases/tag/v0.3.2`
 - PyPI: `https://pypi.org/project/codex-usage-tracking/`
 - TestPyPI: `https://test.pypi.org/project/codex-usage-tracking/`
 

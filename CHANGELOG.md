@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 0.3.2 - 2026-06-08
+
 - Make `open-dashboard` and `serve-dashboard` refresh active-session logs by default, with `--no-refresh` as the explicit cached-index mode.
 - Add a token-protected dashboard action for enabling context loading without restarting a localhost server that started with context loading off.
 
