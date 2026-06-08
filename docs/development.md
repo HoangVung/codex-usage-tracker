@@ -12,7 +12,7 @@ python -m pip install ".[dev]" twine
 codex-usage-tracker install-plugin --python .venv/bin/python
 ```
 
-The public PyPI distribution is `codex-usage-tracking`; it installs the `codex-usage-tracker` command. The repository and import package remain `douglasmonsky/codex-usage-tracker` and `codex_usage_tracker`.
+The public PyPI distribution is [`codex-usage-tracking`](https://pypi.org/project/codex-usage-tracking/); it installs the `codex-usage-tracker` command. The repository and import package remain `douglasmonsky/codex-usage-tracker` and `codex_usage_tracker`.
 
 ## Repo Layout
 
@@ -119,15 +119,21 @@ The release checker verifies version alignment, required public docs, packaged p
 
 Publishing uses GitHub Actions Trusted Publishing through `.github/workflows/publish.yml`; do not upload from a local machine and do not add PyPI or TestPyPI API tokens.
 
-Before running a publish job, configure pending Trusted Publishers in both services with project name `codex-usage-tracking`, owner `douglasmonsky`, repository `codex-usage-tracker`, workflow filename `publish.yml`, and the matching environment name:
+The first public package release, `0.3.0`, was published on June 8, 2026:
+
+- GitHub Release: `https://github.com/douglasmonsky/codex-usage-tracker/releases/tag/v0.3.0`
+- PyPI: `https://pypi.org/project/codex-usage-tracking/`
+- TestPyPI: `https://test.pypi.org/project/codex-usage-tracking/`
+
+Before publishing a future release, confirm Trusted Publishers are still configured in both services with project name `codex-usage-tracking`, owner `douglasmonsky`, repository `codex-usage-tracker`, workflow filename `publish.yml`, and the matching environment name:
 
 - TestPyPI environment: `testpypi`
 - PyPI environment: `pypi`
 
-TestPyPI and PyPI are separate services/accounts. Configure both before publishing to both.
+TestPyPI and PyPI are separate services/accounts. Configure both before publishing to both, and keep the `pypi` GitHub environment behind manual approval.
 
 To publish to TestPyPI, run the `Publish Python package` workflow manually with `target` set to `testpypi`. The job builds once, checks the artifacts with `twine`, uploads them as workflow artifacts, then publishes the same artifacts to `https://test.pypi.org/project/codex-usage-tracking/`.
 
-To publish to PyPI, either publish a GitHub Release for the tag or manually run the workflow with `target` set to `pypi`. Keep the `pypi` GitHub environment behind manual approval. The final project URL is `https://pypi.org/project/codex-usage-tracking/`.
+To publish to PyPI, either publish a GitHub Release for the tag or manually run the workflow with `target` set to `pypi`. The final project URL is `https://pypi.org/project/codex-usage-tracking/`.
 
-PyPI and TestPyPI filenames and versions cannot be reused after upload. If a bad `0.3.0` artifact is uploaded, cut `0.3.1` instead of trying to replace it.
+PyPI and TestPyPI filenames and versions cannot be reused after upload. If a bad artifact is uploaded, cut the next patch version instead of trying to replace it.

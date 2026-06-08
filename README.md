@@ -8,6 +8,7 @@
 Local-first dashboard, Codex plugin, and companion skill for understanding where your Codex tokens and usage credits are going.
 
 [![CI](https://github.com/douglasmonsky/codex-usage-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/douglasmonsky/codex-usage-tracker/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/codex-usage-tracking.svg)](https://pypi.org/project/codex-usage-tracking/)
 ![Python 3.10-3.13](https://img.shields.io/badge/python-3.10--3.13-blue)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -15,7 +16,7 @@ Local-first dashboard, Codex plugin, and companion skill for understanding where
 
 Codex Usage Tracker reads the JSONL logs already written by Codex, indexes aggregate usage counters into SQLite, and gives you a dashboard, CLI, and MCP tools for investigating real usage patterns. It keeps prompts, assistant messages, tool output, pasted secrets, and raw transcript content out of SQLite, CSV exports, and generated dashboard HTML.
 
-Built for developers using Codex locally who want to know which threads, models, subagents, and long chats are driving usage without uploading logs anywhere.
+Built for developers using Codex locally who want to know which threads, models, subagents, and long chats are driving usage without uploading logs anywhere. The public PyPI package is [`codex-usage-tracking`](https://pypi.org/project/codex-usage-tracking/), and it installs the `codex-usage-tracker` command.
 
 After install, you get a localhost dashboard, a local SQLite aggregate index, CLI reports, MCP tools, and a companion Codex skill for asking questions like "what drove my usage this week?"
 
@@ -33,7 +34,7 @@ Use your normal Python launcher for your platform: `python3` is common on macOS/
 
 Package naming: the PyPI distribution is `codex-usage-tracking`; the installed command is `codex-usage-tracker`; the GitHub repository remains `douglasmonsky/codex-usage-tracker`. The `codex-usage-tracker` PyPI name is not this project, so avoid similarly named packages when following these docs.
 
-Development or pre-release source install:
+Source install for development or branch testing:
 
 ```bash
 pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
@@ -41,7 +42,7 @@ pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
 
 `setup` installs or refreshes the local Codex plugin wrapper, initializes local config templates when needed, refreshes the aggregate index, runs `codex-usage-tracker doctor`, and tells you whether Codex needs a restart for plugin discovery.
 
-Want Codex to do it for you? Paste: `Install codex-usage-tracking with pipx, run codex-usage-tracker setup, and open the Codex Usage Tracker dashboard. Use https://github.com/douglasmonsky/codex-usage-tracker only if the PyPI install is unavailable.`
+Want Codex to do it for you? Paste: `Install codex-usage-tracking with pipx, run codex-usage-tracker setup, and open the Codex Usage Tracker dashboard. Use the GitHub source install from https://github.com/douglasmonsky/codex-usage-tracker only for branch testing or if PyPI is temporarily unavailable.`
 
 After plugin discovery, Codex can use the companion usage skill to refresh local aggregates, call the MCP tools, and explain usage patterns conversationally. Examples: [MCP And Codex Skills](docs/mcp.md).
 
@@ -201,7 +202,7 @@ Open a Codex session on your machine and paste this:
 
 ```text
 Install and configure Codex Usage Tracker.
-Install the PyPI distribution codex-usage-tracking with pipx. The installed command should be codex-usage-tracker. If PyPI is unavailable, fall back to pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git".
+Install the PyPI distribution codex-usage-tracking with pipx. The installed command should be codex-usage-tracker. Use pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git" only for branch testing or if PyPI is temporarily unavailable.
 If pipx is missing, install it with the platform's Python launcher or use a local virtual environment.
 After installation, run codex-usage-tracker setup and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
