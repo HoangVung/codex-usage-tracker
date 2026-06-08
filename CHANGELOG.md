@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+## 0.3.0 - 2026-06-08
+
+0.3.0 is a stabilization and public-preview release for the dashboard, CLI, MCP tools, local privacy model, packaged Codex plugin, and companion usage skills. The PyPI/TestPyPI distribution name is now `codex-usage-tracking`; the GitHub repository remains `douglasmonsky/codex-usage-tracker`, the Python import package remains `codex_usage_tracker`, and the installed CLI command remains `codex-usage-tracker`.
+
 - Add tested JSON contract validation for stable CLI and MCP payload schemas.
 - Add schema markers to doctor, pricing coverage, MCP dashboard/export/config, and opt-in context payloads.
 - Add ranked CLI/MCP recommendations with severity score, primary recommendation, secondary signals, and thread rollups.

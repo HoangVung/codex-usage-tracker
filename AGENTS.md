@@ -43,7 +43,7 @@ This repo builds a local Codex plugin and dashboard that track aggregate token u
 python3 -m venv .venv
 . .venv/bin/activate
 python -m pip install --upgrade pip
-python -m pip install ".[dev]"
+python -m pip install ".[dev]" twine
 codex-usage-tracker install-plugin --python .venv/bin/python
 ```
 
@@ -63,7 +63,9 @@ node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard.js
 node --check src/codex_usage_tracker/plugin_data/dashboard/dashboard_state.js
 python scripts/check_release.py
 git diff --check
+rm -rf dist build src/codex_usage_tracker.egg-info src/codex_usage_tracking.egg-info
 python -m build
+python -m twine check dist/*
 python scripts/check_release.py --dist
 ```
 

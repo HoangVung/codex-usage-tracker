@@ -7,7 +7,7 @@ Use `pipx` so the tracker is installed as a command-line app without mixing depe
 ```bash
 python -m pip install --user pipx
 python -m pipx ensurepath
-python -m pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
+pipx install codex-usage-tracking
 codex-usage-tracker setup
 codex-usage-tracker serve-dashboard --open
 ```
@@ -15,10 +15,12 @@ codex-usage-tracker serve-dashboard --open
 Use the Python launcher that is normal for your platform:
 
 - macOS/Linux: `python3` may be the right command instead of `python`.
-- Windows: `py -m pip install --user pipx`, `py -m pipx ensurepath`, and `py -m pipx install ...`.
+- Windows: `py -m pip install --user pipx`, `py -m pipx ensurepath`, and `pipx install ...` after opening a fresh terminal.
 - macOS with Homebrew: `brew install pipx` is a convenient alternative to `python -m pip install --user pipx`.
 
 If `codex-usage-tracker` is not found immediately after `ensurepath`, open a new terminal or add the printed pipx binary directory to `PATH`.
+
+Package naming: the PyPI distribution is `codex-usage-tracking`; the installed command is `codex-usage-tracker`; the GitHub repository remains `douglasmonsky/codex-usage-tracker`. The `codex-usage-tracker` PyPI name is not this project, so avoid similarly named packages when following these docs.
 
 `setup` installs or refreshes the package-owned plugin wrapper, including MCP tools and companion Codex skills, initializes local config templates when needed, refreshes the aggregate index, runs `doctor`, prints a success/failure summary, and tells you whether Codex needs a restart for plugin discovery.
 
@@ -35,11 +37,11 @@ Windows support should work for the core dashboard/CLI when Codex writes readabl
 ## Upgrade
 
 ```bash
-pipx upgrade codex-usage-tracker
+pipx upgrade codex-usage-tracking
 codex-usage-tracker setup
 ```
 
-When installed from GitHub through `pipx`, rerun the GitHub install with `--force`:
+For development or pre-release source installs, rerun the GitHub install with `--force`:
 
 ```bash
 pipx install --force "git+https://github.com/douglasmonsky/codex-usage-tracker.git"
@@ -51,8 +53,9 @@ codex-usage-tracker setup
 Open a Codex session on your machine and paste:
 
 ```text
-Install and configure Codex Usage Tracker from https://github.com/douglasmonsky/codex-usage-tracker.
-Use pipx if it is available. If pipx is missing, install it with the platform's Python launcher or use a local virtual environment.
+Install and configure Codex Usage Tracker.
+Install the PyPI distribution codex-usage-tracking with pipx. The installed command should be codex-usage-tracker. If PyPI is unavailable, fall back to pipx install "git+https://github.com/douglasmonsky/codex-usage-tracker.git".
+If pipx is missing, install it with the platform's Python launcher or use a local virtual environment.
 After installation, run codex-usage-tracker setup and serve-dashboard --open.
 Verify the dashboard opens locally and tell me the dashboard URL plus whether I need to restart Codex for plugin discovery.
 ```

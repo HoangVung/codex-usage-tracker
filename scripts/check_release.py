@@ -18,6 +18,10 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10.
     import tomli as tomllib
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DISTRIBUTION_NAME = "codex-usage-tracking"
+DIST_FILE_STEM = "codex_usage_tracking"
+IMPORT_PACKAGE = "codex_usage_tracker"
+CONSOLE_SCRIPT = "codex-usage-tracker"
 SECRET_PATTERNS = {
     "OpenAI API key": re.compile(r"\bsk-(?:proj-)?[A-Za-z0-9_-]{20,}"),
     "GitHub token": re.compile(r"\b(?:ghp|github_pat)_[A-Za-z0-9_]{20,}"),
@@ -41,6 +45,7 @@ REQUIRED_FILES = [
     "scripts/check_release.py",
     "scripts/benchmark_synthetic_history.py",
     ".github/workflows/ci.yml",
+    ".github/workflows/publish.yml",
     ".github/workflows/pricing-compat.yml",
     ".codex-plugin/plugin.json",
     ".mcp.json",
@@ -181,9 +186,13 @@ def _check_packaging_metadata() -> list[str]:
         failures.append("pyproject.toml should include license-files")
     if "urls" not in project:
         failures.append("pyproject.toml should include project.urls")
+    if project.get("name") != DISTRIBUTION_NAME:
+        failures.append(f"pyproject.toml project.name must be {DISTRIBUTION_NAME!r}")
     scripts = project.get("scripts", {})
-    if scripts.get("codex-usage-tracker") != "codex_usage_tracker.cli:main":
+    if scripts.get(CONSOLE_SCRIPT) != f"{IMPORT_PACKAGE}.cli:main":
         failures.append("pyproject.toml is missing the codex-usage-tracker console script")
+    if "codex-usage-tracker" in project.get("name", ""):
+        failures.append("pyproject.toml project.name must not use the old PyPI distribution name")
     mcp_config = json.loads((REPO_ROOT / ".mcp.json").read_text(encoding="utf-8"))
     mcp_server = mcp_config.get("mcpServers", {}).get("codex-usage-tracker", {})
     if mcp_server.get("command") != "python3":
@@ -206,8 +215,38 @@ def _check_packaging_metadata() -> list[str]:
         failures.append("MCP runtime launcher must pin a 40-character GitHub commit SHA")
     elif not _is_ancestor_when_available(package_spec.group(1), "HEAD"):
         failures.append("MCP runtime launcher package pin is not reachable from HEAD")
+    if "importlib.metadata.version('codex-usage-tracking')" not in launcher:
+        failures.append("MCP runtime launcher must check the codex-usage-tracking distribution")
     if "PACKAGE_SPEC_MARKER" not in launcher:
         failures.append("MCP runtime launcher should invalidate cached runtimes when package spec changes")
+    failures.extend(_check_publish_workflow())
+    return failures
+
+
+def _check_publish_workflow() -> list[str]:
+    workflow_path = REPO_ROOT / ".github" / "workflows" / "publish.yml"
+    if not workflow_path.exists():
+        return ["missing publish workflow: .github/workflows/publish.yml"]
+    workflow = workflow_path.read_text(encoding="utf-8")
+    failures: list[str] = []
+    for required in [
+        "workflow_dispatch:",
+        "release:",
+        "pypa/gh-action-pypi-publish@release/v1",
+        "id-token: write",
+        "repository-url: https://test.pypi.org/legacy/",
+        "python -m twine check dist/*",
+        "https://test.pypi.org/project/codex-usage-tracking/",
+        "https://pypi.org/project/codex-usage-tracking/",
+    ]:
+        if required not in workflow:
+            failures.append(f"publish workflow is missing required Trusted Publishing text: {required}")
+    if re.search(r"(?m)^\s*push\s*:", workflow):
+        failures.append("publish workflow must not publish on ordinary pushes")
+    if re.search(r"(?m)^\s*pull_request\s*:", workflow):
+        failures.append("publish workflow must not publish on pull requests")
+    if "secrets." in workflow or "api-token" in workflow or "password:" in workflow:
+        failures.append("publish workflow must not use token secrets or password-based publishing")
     return failures
 
 
@@ -286,10 +325,11 @@ def _is_ancestor_when_available(commit: str, ref: str) -> bool:
 
 
 def _check_sdist() -> list[str]:
-    sdists = sorted((REPO_ROOT / "dist").glob("codex_usage_tracker-*.tar.gz"))
-    if not sdists:
-        return ["dist/ does not contain a codex_usage_tracker source distribution"]
-    with tarfile.open(sdists[-1]) as sdist:
+    version = _package_version()
+    sdist_path = REPO_ROOT / "dist" / f"{DIST_FILE_STEM}-{version}.tar.gz"
+    if not sdist_path.exists():
+        return [f"dist/ does not contain expected source distribution: {sdist_path.name}"]
+    with tarfile.open(sdist_path) as sdist:
         names = set(sdist.getnames())
     return [
         f"sdist is missing required member: {member}"
@@ -299,10 +339,11 @@ def _check_sdist() -> list[str]:
 
 
 def _check_wheel() -> list[str]:
-    wheels = sorted((REPO_ROOT / "dist").glob("codex_usage_tracker-*.whl"))
-    if not wheels:
-        return ["dist/ does not contain a codex_usage_tracker wheel"]
-    with zipfile.ZipFile(wheels[-1]) as wheel:
+    version = _package_version()
+    wheel_path = REPO_ROOT / "dist" / f"{DIST_FILE_STEM}-{version}-py3-none-any.whl"
+    if not wheel_path.exists():
+        return [f"dist/ does not contain expected wheel: {wheel_path.name}"]
+    with zipfile.ZipFile(wheel_path) as wheel:
         names = set(wheel.namelist())
     failures = [
         f"wheel is missing required member: {member}"
@@ -315,6 +356,11 @@ def _check_wheel() -> list[str]:
         if "__pycache__" in member or member.endswith(".pyc")
     )
     return failures
+
+
+def _package_version() -> str:
+    pyproject = tomllib.loads((REPO_ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    return str(pyproject["project"]["version"])
 
 
 if __name__ == "__main__":
