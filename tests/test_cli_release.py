@@ -91,7 +91,7 @@ def test_usage_skills_prefer_live_dashboard_for_open_requests() -> None:
 
     for skill_path in skill_paths:
         skill_text = skill_path.read_text(encoding="utf-8")
-        live_command_index = skill_text.find("serve-dashboard --refresh --open")
+        live_command_index = skill_text.find("serve-dashboard --refresh --context-api explicit --open")
         static_command_index = skill_text.find("open-dashboard --refresh")
 
         assert live_command_index != -1, skill_path
