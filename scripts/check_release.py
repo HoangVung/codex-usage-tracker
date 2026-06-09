@@ -110,6 +110,7 @@ def main() -> int:
     failures.extend(_check_required_files())
     failures.extend(_check_versions())
     failures.extend(_check_docs())
+    failures.extend(_check_issue_templates())
     failures.extend(_check_packaging_metadata())
     failures.extend(_check_tracked_files_for_secrets())
     if args.dist:
@@ -173,6 +174,37 @@ def _check_docs() -> list[str]:
     return failures
 
 
+def _check_issue_templates() -> list[str]:
+    failures: list[str] = []
+    templates = {
+        "bug_report.yml": [
+            "Do not paste real Codex logs",
+            "strict support bundle",
+            "--privacy-mode strict support-bundle",
+        ],
+        "parser_log_compatibility.yml": [
+            "Do not attach or paste raw Codex JSONL logs",
+            "Synthetic log shape",
+        ],
+        "pricing_or_allowance.yml": [
+            "Do not paste account screenshots with private details",
+            "--privacy-mode strict pricing-coverage --json",
+        ],
+    }
+    for filename, required_texts in templates.items():
+        path = REPO_ROOT / ".github" / "ISSUE_TEMPLATE" / filename
+        if not path.exists():
+            failures.append(f"missing issue template: {path.relative_to(REPO_ROOT)}")
+            continue
+        text = path.read_text(encoding="utf-8")
+        for required in required_texts:
+            if required not in text:
+                failures.append(
+                    f"{path.relative_to(REPO_ROOT)} is missing safe-reporting text: {required}"
+                )
+    return failures
+
+
 def _check_packaging_metadata() -> list[str]:
     sys.path.insert(0, str(REPO_ROOT / "src"))
     from codex_usage_tracker.plugin_installer import plugin_manifest
@@ -231,6 +263,7 @@ def _check_packaging_metadata() -> list[str]:
     if "PACKAGE_SPEC_MARKER" not in launcher:
         failures.append("MCP runtime launcher should invalidate cached runtimes when package spec changes")
     failures.extend(_check_python_support_metadata(project))
+    failures.extend(_check_ci_workflow())
     failures.extend(_check_publish_workflow())
     return failures
 
@@ -279,6 +312,14 @@ def _check_publish_workflow() -> list[str]:
         "id-token: write",
         "repository-url: https://test.pypi.org/legacy/",
         "python -m twine check dist/*",
+        "if: github.event_name == 'workflow_dispatch' && inputs.target == 'testpypi'",
+        "if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.target == 'pypi')",
+        "echo \"ref=$GITHUB_REF\"",
+        "echo \"sha=$GITHUB_SHA\"",
+        "refs/heads/main|refs/tags/*",
+        "Manual PyPI publishing must run from main or a tag ref.",
+        "name: testpypi",
+        "name: pypi",
         "https://test.pypi.org/project/codex-usage-tracking/",
         "https://pypi.org/project/codex-usage-tracking/",
     ]:
@@ -290,6 +331,23 @@ def _check_publish_workflow() -> list[str]:
         failures.append("publish workflow must not publish on pull requests")
     if "secrets." in workflow or "api-token" in workflow or "password:" in workflow:
         failures.append("publish workflow must not use token secrets or password-based publishing")
+    return failures
+
+
+def _check_ci_workflow() -> list[str]:
+    workflow_path = REPO_ROOT / ".github" / "workflows" / "ci.yml"
+    if not workflow_path.exists():
+        return ["missing CI workflow: .github/workflows/ci.yml"]
+    workflow = workflow_path.read_text(encoding="utf-8")
+    failures: list[str] = []
+    for required in [
+        "name: Build package",
+        "python -m build",
+        "python -m twine check dist/*",
+        "python scripts/check_release.py --dist",
+    ]:
+        if required not in workflow:
+            failures.append(f"CI package job is missing required build check: {required}")
     return failures
 
 
