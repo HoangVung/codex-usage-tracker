@@ -120,6 +120,7 @@ def serve_dashboard(
         else "disabled until enabled from the dashboard"
     )
     print("Aggregate rows refresh through /api/usage with a per-server token.")
+    print("Note: Direct API requests (e.g. via curl) must include the 'X-Codex-Usage-Token' header, otherwise they return HTTP 403 Forbidden.")
     print(f"Raw context API is {context_mode}; context is never embedded in the dashboard HTML.")
     if open_browser:
         webbrowser.open(url)

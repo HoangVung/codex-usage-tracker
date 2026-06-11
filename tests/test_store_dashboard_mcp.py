@@ -1128,7 +1128,11 @@ def test_pricing_annotation_and_doctor_pass(tmp_path: Path) -> None:
     )
     plugin_link = tmp_path / "plugins" / "codex-usage-tracker"
     plugin_link.parent.mkdir()
-    plugin_link.symlink_to(repo_root, target_is_directory=True)
+    try:
+        plugin_link.symlink_to(repo_root, target_is_directory=True)
+    except OSError as exc:
+        import pytest
+        pytest.skip(f"Symlink creation not supported/permitted on this OS: {exc}")
     marketplace_path = tmp_path / "marketplace.json"
     marketplace_path.write_text(
         json.dumps({"plugins": [{"name": "codex-usage-tracker"}]}),
@@ -1384,3 +1388,85 @@ def _write_jsonl(path: Path, rows: list[dict[str, object]]) -> None:
         "".join(json.dumps(row) + "\n" for row in rows),
         encoding="utf-8",
     )
+
+
+def test_new_refresh_token_and_parser_diagnostics_ux(tmp_path: Path) -> None:
+    # 1. Test Vietnamese i18n keys
+    from codex_usage_tracker.i18n import translations_for
+    vi_trans = translations_for("vi")
+    assert "status.refresh_forbidden_label" in vi_trans
+    assert "status.refresh_forbidden_detail" in vi_trans
+    assert "parser.warnings_unknown_event_shape" in vi_trans
+    assert "bị từ chối" in vi_trans["status.refresh_forbidden_label"]
+    assert "không hợp lệ" in vi_trans["status.refresh_forbidden_detail"]
+    assert "đã bỏ qua" in vi_trans["parser.warnings_unknown_event_shape"]
+
+    en_trans = translations_for("en")
+    assert "status.refresh_forbidden_label" in en_trans
+    assert "status.refresh_forbidden_detail" in en_trans
+    assert "parser.warnings_unknown_event_shape" in en_trans
+
+    # 2. Test api_token, parser stats, unknown_types in dashboard_payload
+    from codex_usage_tracker.store import record_refresh_metadata
+    codex_home = _make_codex_home(tmp_path)
+    db_path = tmp_path / "usage.sqlite3"
+    
+    # Simulate a refresh with unknown event types and diagnostics
+    record_refresh_metadata(
+        db_path=db_path,
+        scanned_files=2,
+        parsed_events=10,
+        skipped_events=3,
+        inserted_or_updated_events=10,
+        parser_diagnostics={"unknown_event_shape": 5},
+        parser_unknown_types="unrecognized_type1,unrecognized_type2",
+    )
+    
+    payload = dashboard_payload(
+        db_path=db_path,
+        api_token="custom-api-token",
+    )
+    
+    assert payload["api_token"] == "custom-api-token"
+    assert payload["parser_scanned_files"] == 2
+    assert payload["parser_parsed_events"] == 10
+    assert payload["parser_skipped_events"] == 3
+    assert payload["parser_unknown_types"] == "unrecognized_type1,unrecognized_type2"
+    assert payload["parser_diagnostics"]["unknown_event_shape"] == 5
+
+    # 3. Test HTTP 403 error message when calling serve-dashboard handler directly without token
+    from codex_usage_tracker.server import _UsageDashboardHandler
+    pricing_path = _write_pricing(tmp_path / "pricing.json")
+    handler = partial(
+        _UsageDashboardHandler,
+        directory=str(tmp_path),
+        db_path=db_path,
+        pricing_path=pricing_path,
+        allowance_path=tmp_path / "allowance.json",
+        thresholds_path=tmp_path / "thresholds.json",
+        projects_path=tmp_path / "projects.json",
+        limit=5000,
+        since=None,
+        codex_home=codex_home,
+        include_archived=False,
+        dashboard_name="dashboard.html",
+        context_chars=2000,
+        api_token="secret-token",
+        context_api_enabled=True,
+        refresh_lock=threading.Lock(),
+    )
+    server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        err_res = _http_error_json(
+            f"http://127.0.0.1:{server.server_port}/api/usage?refresh=1",
+        )
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join(timeout=5)
+        
+    assert err_res["status"] == 403
+    assert err_res["payload"]["error"] == "Valid API token is required for refresh"
+

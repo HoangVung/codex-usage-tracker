@@ -84,6 +84,9 @@
       'table.source': 'Source',
       'table.last_call': 'Last Call',
       'language.label': 'Language',
+      'status.refresh_forbidden_label': 'Refresh denied',
+      'status.refresh_forbidden_detail': 'Invalid dashboard token. Please restart serve-dashboard and press Ctrl+F5.',
+      'parser.warnings_unknown_event_shape': 'Parser warning: skipped {skipped} non-usage/unrecognized events, but {parsed} usage events were parsed.',
     };
     const supportedLanguages = new Set((initialPayload.available_languages || [{ code: 'en' }]).map(language => language.code));
     const translationCatalog = initialPayload.translation_catalog || { [initialPayload.language || 'en']: initialPayload.translations || {} };
@@ -130,6 +133,10 @@
     let rateCardError = initialPayload.rate_card_error || '';
     let projectMetadataPrivacy = initialPayload.project_metadata_privacy || { mode: initialPayload.privacy_mode || 'normal' };
     let parserDiagnostics = initialPayload.parser_diagnostics || {};
+    let parserScannedFiles = initialPayload.parser_scanned_files || 0;
+    let parserParsedEvents = initialPayload.parser_parsed_events || 0;
+    let parserSkippedEvents = initialPayload.parser_skipped_events || 0;
+    let parserUnknownTypes = initialPayload.parser_unknown_types || '';
     let syncStatus = initialPayload.sync_status || null;
     let apiToken = initialPayload.api_token || '';
     let contextApiEnabled = Boolean(initialPayload.context_api_enabled);
@@ -581,7 +588,19 @@
       sourceEl.hidden = false;
       sourceEl.textContent = t('badge.parser_warnings');
       sourceEl.dataset.state = 'missing';
-      sourceEl.title = tf('parser.warnings_title', { count: number.format(total), entries: entries.map(([key, value]) => `${key}=${value}`).join(', ') });
+      const unknownEventShape = parserDiagnostics.unknown_event_shape || 0;
+      if (unknownEventShape > 0 && parserParsedEvents > 0) {
+        let warningText = tf('parser.warnings_unknown_event_shape', {
+          skipped: number.format(unknownEventShape),
+          parsed: number.format(parserParsedEvents)
+        });
+        if (parserUnknownTypes) {
+          warningText += ` (Types: ${parserUnknownTypes})`;
+        }
+        sourceEl.title = warningText;
+      } else {
+        sourceEl.title = tf('parser.warnings_title', { count: number.format(total), entries: entries.map(([key, value]) => `${key}=${value}`).join(', ') });
+      }
     }
     function updateSyncStatusLine() {
       const sourceEl = document.getElementById('syncStatus');
@@ -1908,7 +1927,7 @@
     function updateLiveStatus(label, detail = '') {
       liveStatusEl.textContent = label;
       liveStatusEl.title = detail || label;
-      liveStatusEl.dataset.state = label === t('status.refresh_error') || label.toLowerCase().includes('error') ? 'error' : 'ready';
+      liveStatusEl.dataset.state = label === t('status.refresh_error') || label === t('status.refresh_forbidden_label') || label.toLowerCase().includes('error') ? 'error' : 'ready';
     }
     function updateToTopVisibility() {
       toTopEl.dataset.visible = window.scrollY > 320 ? 'true' : 'false';
@@ -1924,6 +1943,10 @@
       allowanceError = nextPayload.allowance_error || '';
       rateCardError = nextPayload.rate_card_error || '';
       parserDiagnostics = nextPayload.parser_diagnostics || {};
+      parserScannedFiles = nextPayload.parser_scanned_files || 0;
+      parserParsedEvents = nextPayload.parser_parsed_events || 0;
+      parserSkippedEvents = nextPayload.parser_skipped_events || 0;
+      parserUnknownTypes = nextPayload.parser_unknown_types || '';
       syncStatus = nextPayload.sync_status || null;
       projectMetadataPrivacy = nextPayload.project_metadata_privacy || { mode: nextPayload.privacy_mode || 'normal' };
       apiToken = nextPayload.api_token || apiToken;
@@ -1972,6 +1995,9 @@
           cache: 'no-store',
         });
         if (!response.ok) {
+          if (response.status === 403) {
+            throw new Error('HTTP 403');
+          }
           throw new Error(`HTTP ${response.status}`);
         }
         const nextPayload = await response.json();
@@ -1987,8 +2013,12 @@
         updateLiveStatus(autoRefreshEl.checked ? t('badge.live') : t('status.updated'), tf('live.updated_detail', { time: formatTimestamp(nextPayload.refreshed_at), loaded: loadedRowsDescription(), history: historyRowsDescription(), indexed, skipped }));
       } catch (error) {
         const message = error.message || String(error);
-        updateLiveStatus(t('status.refresh_error'), tf('live.refresh_unavailable', { message, suffix: manual ? t('live.refresh_suffix') : '' }));
-        if (manual && message === 'HTTP 404') window.location.reload();
+        if (message.includes('403') || message.includes('Forbidden')) {
+          updateLiveStatus(t('status.refresh_forbidden_label'), t('status.refresh_forbidden_detail'));
+        } else {
+          updateLiveStatus(t('status.refresh_error'), tf('live.refresh_unavailable', { message, suffix: manual ? t('live.refresh_suffix') : '' }));
+          if (manual && message === 'HTTP 404') window.location.reload();
+        }
       } finally {
         refreshInFlight = false;
         refreshDashboardEl.disabled = false;

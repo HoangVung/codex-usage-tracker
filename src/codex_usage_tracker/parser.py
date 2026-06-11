@@ -227,6 +227,9 @@ def _parse_codex_jsonl_v1(
             if entry_type != "event_msg" or payload.get("type") != "token_count":
                 if entry_type == "event_msg":
                     _increment_stat(stats, "unknown_event_shape")
+                    event_type = payload.get("type")
+                    if isinstance(event_type, str) and event_type:
+                        _increment_stat(stats, f"unknown_type_{event_type}")
                 continue
 
             info = payload.get("info")

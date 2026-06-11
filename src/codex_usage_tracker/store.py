@@ -61,6 +61,12 @@ def refresh_usage_index(
     inserted = upsert_usage_events(events, db_path=db_path)
     skipped_events = stats.get("skipped_events", 0)
     diagnostics = compact_parser_diagnostics(stats)
+    unknown_types = [
+        key.removeprefix("unknown_type_")
+        for key in stats
+        if key.startswith("unknown_type_") and stats[key] > 0
+    ]
+    unknown_types_str = ",".join(sorted(unknown_types)[:10]) if unknown_types else ""
     record_refresh_metadata(
         db_path=db_path,
         scanned_files=len(logs),
@@ -68,6 +74,7 @@ def refresh_usage_index(
         skipped_events=skipped_events,
         inserted_or_updated_events=inserted,
         parser_diagnostics=diagnostics,
+        parser_unknown_types=unknown_types_str,
     )
 
     # TODO: Consider moving this sync orchestration out of the store layer (store.py)
@@ -235,6 +242,7 @@ def record_refresh_metadata(
     skipped_events: int,
     inserted_or_updated_events: int,
     parser_diagnostics: dict[str, int] | None = None,
+    parser_unknown_types: str | None = None,
 ) -> None:
     """Record the latest refresh counters in refresh_meta."""
 
@@ -248,6 +256,8 @@ def record_refresh_metadata(
         "schema_version": str(SCHEMA_VERSION),
         "usage_events_schema_checksum": USAGE_EVENT_SCHEMA_CHECKSUM,
     }
+    if parser_unknown_types is not None:
+        values["parser_unknown_types"] = parser_unknown_types
     diagnostics = parser_diagnostics or {}
     for key in PARSER_DIAGNOSTIC_KEYS:
         values[f"parser_{key}"] = str(int(diagnostics.get(key, 0)))
