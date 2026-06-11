@@ -50,6 +50,8 @@ class UsageEvent:
     cumulative_output_tokens: int
     cumulative_reasoning_output_tokens: int
     cumulative_total_tokens: int
+    device_id: str | None = None
+    workspace_id: str | None = None
 
     @property
     def uncached_input_tokens(self) -> int:

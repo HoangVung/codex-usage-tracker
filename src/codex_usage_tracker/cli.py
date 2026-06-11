@@ -151,6 +151,7 @@ def _build_parser() -> argparse.ArgumentParser:
     _add_threshold_parser(subparsers)
     _add_project_parser(subparsers)
     _add_support_bundle_parser(subparsers)
+    _add_sync_parser(subparsers)
     return parser
 
 
@@ -254,6 +255,8 @@ def _add_refresh_parser(subparsers: argparse._SubParsersAction[argparse.Argument
     refresh.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
     refresh.add_argument("--include-archived", action="store_true")
     refresh.add_argument("--json", action="store_true", dest="as_json")
+    refresh.add_argument("--sync", action="store_true", default=None, help="Force online sync")
+    refresh.add_argument("--no-sync", action="store_false", dest="sync", help="Disable online sync")
 
 
 def _add_inspect_log_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
@@ -410,6 +413,8 @@ def _add_dashboard_parsers(
     )
     open_dashboard.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
     open_dashboard.add_argument("--json", action="store_true", dest="as_json")
+    open_dashboard.add_argument("--sync", action="store_true", default=None, help="Force online sync during refresh")
+    open_dashboard.add_argument("--no-sync", action="store_false", dest="sync", help="Disable online sync during refresh")
 
     serve = subparsers.add_parser(
         "serve-dashboard",
@@ -444,6 +449,8 @@ def _add_dashboard_parsers(
     )
     serve.add_argument("--codex-home", type=Path, default=DEFAULT_CODEX_HOME)
     serve.add_argument("--include-archived", action="store_true")
+    serve.add_argument("--sync", action="store_true", default=None, help="Force online sync during refresh")
+    serve.add_argument("--no-sync", action="store_false", dest="sync", help="Disable online sync during refresh")
     serve.add_argument(
         "--json",
         action="store_true",
@@ -761,6 +768,7 @@ def _run_refresh(args: argparse.Namespace) -> int:
         codex_home=args.codex_home,
         db_path=args.db,
         include_archived=args.include_archived,
+        sync=getattr(args, "sync", None),
     )
     if args.as_json:
         _print_json(refresh_result_payload(result, schema="codex-usage-tracker-refresh-v1"))
@@ -980,6 +988,7 @@ def _run_open_dashboard(args: argparse.Namespace) -> int:
                 codex_home=args.codex_home,
                 db_path=args.db,
                 include_archived=args.include_archived,
+                sync=getattr(args, "sync", None),
             ),
             schema="codex-usage-tracker-refresh-v1",
         )
@@ -1040,6 +1049,7 @@ def _run_serve_dashboard(args: argparse.Namespace) -> int:
             codex_home=args.codex_home,
             db_path=args.db,
             include_archived=args.include_archived,
+            sync=getattr(args, "sync", None),
         )
     serve_dashboard(
         db_path=args.db,
@@ -1311,6 +1321,190 @@ def _run_support_bundle(args: argparse.Namespace) -> int:
     return 0
 
 
+def _add_sync_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentParser]) -> None:
+    sync_parser = subparsers.add_parser("sync", help="Supabase online sync subcommands")
+    sync_subparsers = sync_parser.add_subparsers(dest="sync_command", required=True)
+
+    init_parser = sync_subparsers.add_parser("init", help="Initialize Supabase sync config")
+    init_parser.add_argument("--url", help="Supabase project URL")
+    init_parser.add_argument("--key", help="Supabase anon/service key")
+    init_parser.add_argument("--workspace-id", help="Workspace or group ID")
+    init_parser.add_argument("--device-id", help="Local device ID override")
+    init_parser.add_argument("--auto", choices=["true", "false"], help="Auto sync on refresh")
+    init_parser.add_argument("--privacy", choices=["strict", "redacted", "normal"], help="Sync privacy mode (default: strict)")
+    init_parser.add_argument("--force", action="store_true", help="Overwrite existing config")
+
+    sync_subparsers.add_parser("status", help="Show current sync status and config")
+
+    push_parser = sync_subparsers.add_parser("push", help="Push local usage events to Supabase")
+    push_parser.add_argument("--privacy-mode", choices=["strict", "redacted", "normal"], help="Override sync privacy mode")
+    push_parser.add_argument("--since", help="Push events starting from timestamp (ISO format)")
+    push_parser.add_argument("--limit", type=int, help="Limit number of events to push")
+    push_parser.add_argument("--dry-run", action="store_true", help="Dry run push without sending requests")
+
+    pull_parser = sync_subparsers.add_parser("pull", help="Pull remote usage events from Supabase")
+    pull_parser.add_argument("--since", help="Pull events starting from timestamp (ISO format)")
+    pull_parser.add_argument("--limit", type=int, help="Limit number of events to pull")
+    pull_parser.add_argument("--dry-run", action="store_true", help="Dry run pull without modifying local database")
+
+    run_parser = sync_subparsers.add_parser("run", help="Run sync push then pull")
+    run_parser.add_argument("--privacy-mode", choices=["strict", "redacted", "normal"], help="Override sync privacy mode")
+    run_parser.add_argument("--since", help="Sync events starting from timestamp (ISO format)")
+    run_parser.add_argument("--limit", type=int, help="Limit number of events to sync")
+    run_parser.add_argument("--dry-run", action="store_true", help="Dry run sync")
+
+
+def _run_sync(args: argparse.Namespace) -> int:
+    from codex_usage_tracker.sync_supabase import (
+        load_sync_config,
+        sync_push,
+        sync_pull,
+        DEFAULT_SYNC_PATH,
+        SyncConfig,
+        record_sync_metadata
+    )
+
+    config = load_sync_config(DEFAULT_SYNC_PATH)
+
+    if args.sync_command == "init":
+        if config.loaded and not args.force:
+            print(f"Error: Config already exists at {DEFAULT_SYNC_PATH}. Use --force to overwrite.", file=sys.stderr)
+            return 1
+
+        url = args.url or ""
+        key = args.key or ""
+        workspace_id = args.workspace_id or ""
+
+        if not url:
+            try:
+                if sys.stdin.isatty():
+                    url = input("Supabase URL: ").strip()
+            except Exception:
+                pass
+        if not key:
+            try:
+                if sys.stdin.isatty():
+                    key = input("Supabase Anon/Service Key: ").strip()
+            except Exception:
+                pass
+        if not workspace_id and args.workspace_id is None:
+            try:
+                if sys.stdin.isatty():
+                    workspace_id = input("Workspace ID (optional): ").strip()
+            except Exception:
+                pass
+
+        auto = False
+        auto_val = args.auto
+        if auto_val is None:
+            try:
+                if sys.stdin.isatty():
+                    auto_input = input("Auto-sync on refresh? (y/N): ").strip().lower()
+                    auto = auto_input in ("y", "yes", "true")
+            except Exception:
+                pass
+        else:
+            auto = auto_val == "true"
+
+        privacy = args.privacy or "strict"
+
+        new_config = SyncConfig(
+            path=DEFAULT_SYNC_PATH,
+            supabase_url=url,
+            supabase_key=key,
+            workspace_id=workspace_id,
+            device_id=args.device_id or config.device_id,
+            auto_on_refresh=auto,
+            privacy_mode=privacy,
+        )
+        new_config.save()
+        print(f"Initialized sync configuration at {DEFAULT_SYNC_PATH}")
+        return 0
+
+    if args.sync_command == "status":
+        print(f"Sync Config Path: {DEFAULT_SYNC_PATH}")
+        if not config.loaded:
+            print("Status: Not initialized")
+            if config.error:
+                print(f"Error loading config: {config.error}")
+            return 0
+
+        print(f"Supabase URL: {config.supabase_url or 'Not set'}")
+        print(f"Supabase Key: {'Set' if config.supabase_key else 'Not set'}")
+        print(f"Workspace ID: {config.workspace_id or 'Not set'}")
+        print(f"Device ID: {config.device_id}")
+        print(f"Auto sync on refresh: {config.auto_on_refresh}")
+        print(f"Sync Privacy Mode: {config.privacy_mode}")
+        return 0
+
+    if not config.supabase_url or not config.supabase_key:
+        print("Error: Supabase URL and API key must be configured. Run 'codex-usage-tracker sync init'.", file=sys.stderr)
+        return 1
+
+    if args.sync_command == "push":
+        mode = args.privacy_mode or config.privacy_mode or "strict"
+        if mode == "normal":
+            print("[WARNING] normal privacy mode is selected. Local source paths, CWDs, and thread names might be uploaded.", file=sys.stderr)
+        pushed = sync_push(
+            db_path=args.db,
+            config=config,
+            privacy_mode=args.privacy_mode,
+            since=args.since,
+            limit=args.limit,
+            dry_run=args.dry_run
+        )
+        if args.dry_run:
+            print(f"[Dry-run] Would push {pushed} local events (privacy_mode={mode})")
+        else:
+            print(f"Successfully pushed {pushed} local events to Supabase")
+        return 0
+
+    if args.sync_command == "pull":
+        pulled = sync_pull(
+            db_path=args.db,
+            config=config,
+            since=args.since,
+            limit=args.limit,
+            dry_run=args.dry_run
+        )
+        if args.dry_run:
+            print(f"[Dry-run] Would pull and merge up to {pulled} remote events")
+        else:
+            print(f"Successfully pulled and merged {pulled} remote events from Supabase")
+        return 0
+
+    if args.sync_command == "run":
+        try:
+            mode = args.privacy_mode or config.privacy_mode or "strict"
+            if mode == "normal":
+                print("[WARNING] normal privacy mode is selected. Local source paths, CWDs, and thread names might be uploaded.", file=sys.stderr)
+            pushed = sync_push(
+                db_path=args.db,
+                config=config,
+                privacy_mode=args.privacy_mode,
+                since=args.since,
+                limit=args.limit,
+                dry_run=args.dry_run
+            )
+            pulled = sync_pull(
+                db_path=args.db,
+                config=config,
+                since=args.since,
+                limit=args.limit,
+                dry_run=args.dry_run
+            )
+            if args.dry_run:
+                print(f"[Dry-run] Would push {pushed} events and pull/merge events")
+            else:
+                record_sync_metadata(args.db, "success", pushed, pulled)
+                print(f"Sync complete: pushed {pushed} events, pulled/merged {pulled} events")
+            return 0
+        except Exception as exc:
+            if not args.dry_run:
+                record_sync_metadata(args.db, "failed", error=str(exc))
+            raise
+
+
 _COMMAND_HANDLERS = {
     "setup": _run_setup,
     "doctor": _run_doctor,
@@ -1341,6 +1535,7 @@ _COMMAND_HANDLERS = {
     "init-thresholds": _run_init_thresholds,
     "init-projects": _run_init_projects,
     "support-bundle": _run_support_bundle,
+    "sync": _run_sync,
 }
 
 if __name__ == "__main__":

@@ -50,6 +50,7 @@ def refresh_usage_index(
     codex_home: Path = DEFAULT_CODEX_HOME,
     db_path: Path = DEFAULT_DB_PATH,
     include_archived: bool = False,
+    sync: bool | None = None,
 ) -> RefreshResult:
     """Scan Codex logs and upsert aggregate usage events."""
 
@@ -68,6 +69,14 @@ def refresh_usage_index(
         inserted_or_updated_events=inserted,
         parser_diagnostics=diagnostics,
     )
+
+    should_sync = sync
+    from codex_usage_tracker.sync_supabase import load_sync_config, sync_run_auto
+    sync_config = load_sync_config()
+    if should_sync is None:
+        should_sync = sync_config.auto_on_refresh and bool(sync_config.supabase_url) and bool(sync_config.supabase_key)
+    if should_sync and sync_config.supabase_url and sync_config.supabase_key:
+        sync_run_auto(db_path, sync_config)
     return RefreshResult(
         scanned_files=len(logs),
         parsed_events=len(events),

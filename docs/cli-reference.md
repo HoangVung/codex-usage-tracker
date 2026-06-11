@@ -181,6 +181,50 @@ Stable local config files:
 
 These config schemas are part of the 1.0 compatibility surface. New optional fields may be added, but existing meanings should not change without documentation and a compatibility plan.
 
+## Online Sync (Supabase)
+
+Sync aggregate usage data across multiple machines using a Supabase PostgreSQL database:
+
+Initialize sync configuration:
+
+```bash
+codex-usage-tracker sync init
+codex-usage-tracker sync init --url <supabase-url> --key <supabase-key> --workspace-id <workspace-id> --auto true --privacy strict
+```
+
+Show sync status and configuration:
+
+```bash
+codex-usage-tracker sync status
+```
+
+Push local usage events to Supabase:
+
+```bash
+codex-usage-tracker sync push
+codex-usage-tracker sync push --since 2026-06-01 --limit 100 --privacy-mode strict
+```
+
+Pull remote usage events from Supabase to local SQLite:
+
+```bash
+codex-usage-tracker sync pull
+codex-usage-tracker sync pull --since 2026-06-01 --limit 500
+```
+
+Run both push and pull:
+
+```bash
+codex-usage-tracker sync run
+```
+
+Enable/disable sync dynamically when running `refresh`, `open-dashboard`, or `serve-dashboard`:
+
+```bash
+codex-usage-tracker refresh --sync
+codex-usage-tracker open-dashboard --no-sync
+```
+
 ## Privacy Mode
 
 `--privacy-mode` is a global option, so place it before the subcommand:

@@ -130,6 +130,7 @@
     let rateCardError = initialPayload.rate_card_error || '';
     let projectMetadataPrivacy = initialPayload.project_metadata_privacy || { mode: initialPayload.privacy_mode || 'normal' };
     let parserDiagnostics = initialPayload.parser_diagnostics || {};
+    let syncStatus = initialPayload.sync_status || null;
     let apiToken = initialPayload.api_token || '';
     let contextApiEnabled = Boolean(initialPayload.context_api_enabled);
     let actionThresholds = initialPayload.action_thresholds || {};
@@ -581,6 +582,33 @@
       sourceEl.textContent = t('badge.parser_warnings');
       sourceEl.dataset.state = 'missing';
       sourceEl.title = tf('parser.warnings_title', { count: number.format(total), entries: entries.map(([key, value]) => `${key}=${value}`).join(', ') });
+    }
+    function updateSyncStatusLine() {
+      const sourceEl = document.getElementById('syncStatus');
+      if (!syncStatus || !syncStatus.status) {
+        sourceEl.hidden = true;
+        sourceEl.textContent = '';
+        sourceEl.title = '';
+        return;
+      }
+      sourceEl.hidden = false;
+      const timeStrFull = syncStatus.at ? formatTimestampTitle(syncStatus.at) : '';
+      if (syncStatus.status === 'success') {
+        sourceEl.textContent = t('badge.synced');
+        sourceEl.dataset.state = 'ready';
+        sourceEl.title = tf('sync.title_success', {
+          pushed: number.format(syncStatus.pushed || 0),
+          pulled: number.format(syncStatus.pulled || 0),
+          time: timeStrFull
+        });
+      } else {
+        sourceEl.textContent = t('badge.sync_failed');
+        sourceEl.dataset.state = 'error';
+        sourceEl.title = tf('sync.title_failed', {
+          error: syncStatus.error || 'Unknown error',
+          time: timeStrFull
+        });
+      }
     }
     function updatePrivacyModeLine() {
       const sourceEl = document.getElementById('privacyMode');
@@ -1896,6 +1924,7 @@
       allowanceError = nextPayload.allowance_error || '';
       rateCardError = nextPayload.rate_card_error || '';
       parserDiagnostics = nextPayload.parser_diagnostics || {};
+      syncStatus = nextPayload.sync_status || null;
       projectMetadataPrivacy = nextPayload.project_metadata_privacy || { mode: nextPayload.privacy_mode || 'normal' };
       apiToken = nextPayload.api_token || apiToken;
       contextApiEnabled = Boolean(nextPayload.context_api_enabled);
@@ -1912,6 +1941,7 @@
       updateAllowanceSourceLine();
       updatePrivacyModeLine();
       updateParserDiagnosticsLine();
+      updateSyncStatusLine();
       updateLoadLimitControl();
       updateHistoryScopeControl();
       render();
@@ -2079,6 +2109,7 @@
     updateAllowanceSourceLine();
     updatePrivacyModeLine();
     updateParserDiagnosticsLine();
+    updateSyncStatusLine();
     updateLoadLimitControl();
     updateHistoryScopeControl();
     if (!liveRefreshSupported) {

@@ -109,6 +109,13 @@ def dashboard_payload(
         for key, value in metadata.items()
         if key.startswith("parser_") and _safe_int(value)
     }
+    sync_status = {
+        "status": metadata.get("last_sync_status"),
+        "pushed": _safe_int(metadata.get("last_sync_pushed")),
+        "pulled": _safe_int(metadata.get("last_sync_pulled")),
+        "at": metadata.get("last_sync_at"),
+        "error": metadata.get("last_sync_error") or None,
+    } if "last_sync_status" in metadata else None
     return {
         **dashboard_i18n_payload(language),
         "rows": annotated_rows,
@@ -152,6 +159,7 @@ def dashboard_payload(
         "project_config_error": projects.error,
         "privacy_mode": privacy_mode,
         "project_metadata_privacy": project_privacy_metadata(privacy_mode),
+        "sync_status": sync_status,
     }
 
 

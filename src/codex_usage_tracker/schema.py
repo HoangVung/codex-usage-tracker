@@ -49,6 +49,8 @@ USAGE_EVENT_COLUMNS = (
     UsageColumn("cumulative_output_tokens", "INTEGER NOT NULL", "INTEGER"),
     UsageColumn("cumulative_reasoning_output_tokens", "INTEGER NOT NULL", "INTEGER"),
     UsageColumn("cumulative_total_tokens", "INTEGER NOT NULL", "INTEGER"),
+    UsageColumn("device_id", "TEXT", "TEXT", repairable=True),
+    UsageColumn("workspace_id", "TEXT", "TEXT", repairable=True),
     UsageColumn("uncached_input_tokens", "INTEGER NOT NULL", "INTEGER"),
     UsageColumn("cache_ratio", "REAL NOT NULL", "REAL"),
     UsageColumn("reasoning_output_ratio", "REAL NOT NULL", "REAL"),

@@ -732,8 +732,8 @@ def test_dashboard_history_scope_excludes_archived_rows_by_default(tmp_path: Pat
     assert all_history_payload["total_available_rows"] == 5
     assert len(active_rows) == 4
     assert len(all_rows) == 5
-    assert not any("/archived_sessions/" in row["source_file"] for row in active_rows)
-    assert any("/archived_sessions/" in row["source_file"] for row in all_rows)
+    assert not any("archived_sessions" in row["source_file"].replace("\\", "/") for row in active_rows)
+    assert any("archived_sessions" in row["source_file"].replace("\\", "/") for row in all_rows)
 
 
 def test_dashboard_server_usage_api_switches_history_scope(tmp_path: Path) -> None:

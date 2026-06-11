@@ -144,9 +144,10 @@ def test_privacy_modes_cover_dashboard_query_session_and_csv(tmp_path: Path) -> 
     export_usage_csv(redacted_csv, db_path=db_path, privacy_mode="redacted")
     export_usage_csv(strict_csv, db_path=db_path, privacy_mode="strict")
 
-    assert str(fixture.cwd) in json.dumps(dashboard_by_mode["normal"])
-    assert str(fixture.cwd) in json.dumps(query_by_mode["normal"])
-    assert str(fixture.cwd) in json.dumps(session_by_mode["normal"])
+    cwd_normalized = str(fixture.cwd).replace("\\", "/")
+    assert cwd_normalized in json.dumps(dashboard_by_mode["normal"]).replace("\\\\", "/")
+    assert cwd_normalized in json.dumps(query_by_mode["normal"]).replace("\\\\", "/")
+    assert cwd_normalized in json.dumps(session_by_mode["normal"]).replace("\\\\", "/")
     for payload in (
         dashboard_by_mode["redacted"],
         dashboard_by_mode["strict"],
@@ -155,8 +156,8 @@ def test_privacy_modes_cover_dashboard_query_session_and_csv(tmp_path: Path) -> 
         session_by_mode["redacted"],
         session_by_mode["strict"],
     ):
-        text = json.dumps(payload)
-        assert str(fixture.cwd) not in text
+        text = json.dumps(payload).replace("\\\\", "/")
+        assert cwd_normalized not in text
         assert "[redacted cwd:" in text
     assert query_by_mode["redacted"]["rows"][0]["project_relative_cwd"] == "private/workflow"
     assert query_by_mode["redacted"]["rows"][0]["git_branch"] == PRIVATE_BRANCH
@@ -165,8 +166,8 @@ def test_privacy_modes_cover_dashboard_query_session_and_csv(tmp_path: Path) -> 
     assert query_by_mode["strict"]["rows"][0]["git_branch"] is None
     assert query_by_mode["strict"]["rows"][0]["git_remote_label"] is None
     assert query_by_mode["strict"]["rows"][0]["project_tags"] == []
-    assert str(fixture.cwd) not in redacted_csv.read_text(encoding="utf-8")
-    assert str(fixture.cwd) not in strict_csv.read_text(encoding="utf-8")
+    assert cwd_normalized not in redacted_csv.read_text(encoding="utf-8").replace("\\", "/")
+    assert cwd_normalized not in strict_csv.read_text(encoding="utf-8").replace("\\", "/")
 
 
 def test_context_loading_is_explicit_redacted_and_not_static_html(tmp_path: Path) -> None:

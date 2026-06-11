@@ -95,6 +95,15 @@ Codex credit estimates are calculated only from aggregate token fields and bundl
 
 The optional allowance config is local and stores only the remaining percentages, reset times, or credit totals you manually enter.
 
+## Online Sync (Supabase)
+
+When online sync is configured via Supabase:
+
+- Sync is aggregate-only. Prompts, assistant messages, tool outputs, pasted secrets, raw transcripts, and raw logged context are never uploaded.
+- Uploads default to strict or redacted privacy mode (configured in `sync.json`). In normal mode, local paths and cwd strings are sent, which requires caution.
+- Local high-fidelity unredacted rows are never overwritten by redacted remote rows during pull/merge operations (idempotence is preserved on a per-device level).
+- Raw context is completely unsupported in v1 sync.
+
 ## Sharing Checklist
 
 Before sharing a dashboard, CSV, JSON query result, or support bundle:
