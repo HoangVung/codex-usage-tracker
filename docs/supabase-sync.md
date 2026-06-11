@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS usage_events (
     cwd TEXT,
     model TEXT,
     effort TEXT,
-    current_date TEXT,
+    "current_date" TEXT,
     timezone TEXT,
     thread_source TEXT,
     subagent_type TEXT,
@@ -75,8 +75,14 @@ CREATE POLICY "Allow anon select by workspace" ON usage_events
     FOR SELECT
     TO anon
     USING (workspace_id = 'your-workspace-id');
-```
 
+-- Policy 3: Allow update/upsert for anonymous users matching a specific workspace ID
+CREATE POLICY "Allow anon update by workspace" ON usage_events
+    FOR UPDATE
+    TO anon
+    USING (workspace_id = 'your-workspace-id')
+    WITH CHECK (workspace_id = 'your-workspace-id');
+```
 > [!WARNING]
 > **Important Note on Workspace RLS Policies**:
 > The static workspace policies above (`workspace_id = 'your-workspace-id'`) are intended only for private, personal, or trusted internal environment syncs where simple segregation is needed. Anyone who inspects the local configuration or queries the public API can easily spoof the `workspace_id`.
