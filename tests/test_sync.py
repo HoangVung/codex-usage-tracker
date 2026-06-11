@@ -270,6 +270,9 @@ def test_cli_sync_commands(mock_req: MagicMock, tmp_path: Path) -> None:
             assert code == 0
             mock_print.assert_any_call("Supabase URL: https://example.supabase.co")
             mock_print.assert_any_call("Workspace ID: work-abc")
+            for call in mock_print.call_args_list:
+                for arg in call[0]:
+                    assert "some-key" not in str(arg)
             
     # 4. Test push
     # Insert a dummy row first to allow pushing
@@ -361,3 +364,59 @@ def test_cli_sync_commands(mock_req: MagicMock, tmp_path: Path) -> None:
         assert len(rows) == 2
         assert rows[0]["record_id"] == "rec-1"
         assert rows[1]["record_id"] == "rec-remote"
+
+
+def test_sync_privacy_mode_normal_warning(tmp_path: Path) -> None:
+    db_path = tmp_path / "usage.sqlite3"
+    from codex_usage_tracker.store import connect, init_db
+    with connect(db_path) as conn:
+        init_db(conn)
+        conn.execute(
+            """
+            INSERT INTO usage_events (
+                record_id, session_id, event_timestamp, source_file, line_number,
+                input_tokens, cached_input_tokens, output_tokens, reasoning_output_tokens, total_tokens,
+                cumulative_input_tokens, cumulative_cached_input_tokens, cumulative_output_tokens, cumulative_reasoning_output_tokens, cumulative_total_tokens,
+                uncached_input_tokens, cache_ratio, reasoning_output_ratio, context_window_percent
+            ) VALUES (?, ?, ?, ?, ?, 10, 0, 10, 0, 20, 10, 0, 10, 0, 20, 10, 0, 0, 0)
+            """,
+            ("rec-warning", "sess-1", "2026-06-11T10:00:00Z", "main.py", 10)
+        )
+    config = SyncConfig(
+        supabase_url="https://example.supabase.co",
+        supabase_key="key",
+        device_id="my-device-123",
+        workspace_id="my-workspace"
+    )
+    with patch("codex_usage_tracker.sync_supabase._supabase_request") as mock_req:
+        with patch("sys.stderr") as mock_stderr:
+            sync_push(db_path, config, privacy_mode="normal")
+            assert mock_req.call_count == 1
+            # Verify warning was written to stderr
+            mock_stderr.write.assert_any_call("[WARNING] normal privacy mode is selected for online sync. Local source paths, CWDs, and thread names will be uploaded without redaction.")
+
+
+def test_sync_failure_does_not_break_refresh(tmp_path: Path) -> None:
+    from codex_usage_tracker.store import refresh_usage_index
+    # Create empty codex_home and config
+    codex_home = tmp_path / "codex"
+    (codex_home / "sessions").mkdir(parents=True)
+    (codex_home / "session_index.jsonl").write_text("", encoding="utf-8")
+    db_path = tmp_path / "usage.sqlite3"
+    config_path = tmp_path / "sync.json"
+    
+    # Configure auto-sync
+    config = SyncConfig(
+        path=config_path,
+        supabase_url="https://example.supabase.co",
+        supabase_key="key",
+        auto_on_refresh=True
+    )
+    config.save()
+    
+    # Mock sync to fail with exception
+    with patch("codex_usage_tracker.sync_supabase._supabase_request", side_effect=RuntimeError("Supabase connection failed")):
+        with patch("codex_usage_tracker.sync_supabase.DEFAULT_SYNC_PATH", config_path):
+            result = refresh_usage_index(codex_home=codex_home, db_path=db_path, sync=True)
+            # The refresh index must succeed even if the sync operation failed
+            assert result.parsed_events == 0

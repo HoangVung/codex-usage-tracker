@@ -241,6 +241,9 @@ def sync_push(
         return 0
 
     mode = privacy_mode or config.privacy_mode or "strict"
+    if mode == "normal":
+        import sys
+        print("[WARNING] normal privacy mode is selected for online sync. Local source paths, CWDs, and thread names will be uploaded without redaction.", file=sys.stderr)
     from codex_usage_tracker.projects import apply_project_privacy_to_rows
     redacted_rows = apply_project_privacy_to_rows(local_rows, privacy_mode=mode)
 

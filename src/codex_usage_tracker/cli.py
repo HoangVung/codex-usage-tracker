@@ -1327,11 +1327,11 @@ def _add_sync_parser(subparsers: argparse._SubParsersAction[argparse.ArgumentPar
 
     init_parser = sync_subparsers.add_parser("init", help="Initialize Supabase sync config")
     init_parser.add_argument("--url", help="Supabase project URL")
-    init_parser.add_argument("--key", help="Supabase anon/service key")
+    init_parser.add_argument("--key", help="Supabase anon key")
     init_parser.add_argument("--workspace-id", help="Workspace or group ID")
     init_parser.add_argument("--device-id", help="Local device ID override")
     init_parser.add_argument("--auto", choices=["true", "false"], help="Auto sync on refresh")
-    init_parser.add_argument("--privacy", choices=["strict", "redacted", "normal"], help="Sync privacy mode (default: strict)")
+    init_parser.add_argument("--privacy", choices=["strict", "redacted", "normal"], default="strict", help="Sync privacy mode (default: strict)")
     init_parser.add_argument("--force", action="store_true", help="Overwrite existing config")
 
     sync_subparsers.add_parser("status", help="Show current sync status and config")
@@ -1384,7 +1384,7 @@ def _run_sync(args: argparse.Namespace) -> int:
         if not key:
             try:
                 if sys.stdin.isatty():
-                    key = input("Supabase Anon/Service Key: ").strip()
+                    key = input("Supabase Anon Key: ").strip()
             except Exception:
                 pass
         if not workspace_id and args.workspace_id is None:

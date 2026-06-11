@@ -2,9 +2,15 @@
 
 Codex Usage Tracker supports online sync via a self-hosted or cloud Supabase instance. This allows multiple machines to share a merged view of aggregate model usage.
 
+> [!CAUTION]
+> **Security Warning**: 
+> - **NEVER** use the `service_role` key in this local configuration. The `service_role` key bypasses all Row Level Security (RLS) policies and would allow anyone with access to the local config file to read, modify, or delete all data in the database.
+> - Always use the public **`anon` key** combined with Row Level Security (RLS) policies.
+> - **NEVER** commit `~/.codex-usage-tracker/sync.json` to public version control, as it contains your project credentials. Add it to your global `.gitignore`.
+
 ## Supabase PostgreSQL Schema
 
-To set up online sync, run the following SQL commands in your Supabase SQL Editor to create the required table:
+To set up online sync, run the following SQL commands in your Supabase SQL Editor to create the required table, enable Row Level Security, and configure security policies:
 
 ```sql
 -- Create the usage_events table for aggregate records
@@ -54,7 +60,28 @@ CREATE TABLE IF NOT EXISTS usage_events (
 CREATE INDEX IF NOT EXISTS usage_events_workspace_idx ON usage_events (workspace_id);
 -- Index for ordering by timestamp
 CREATE INDEX IF NOT EXISTS usage_events_timestamp_idx ON usage_events (event_timestamp DESC);
+
+-- Enable Row Level Security (RLS)
+ALTER TABLE usage_events ENABLE ROW LEVEL SECURITY;
+
+-- Policy 1: Allow public anonymous insertion of usage events matching a specific workspace ID
+CREATE POLICY "Allow anon insert by workspace" ON usage_events
+    FOR INSERT
+    TO anon
+    WITH CHECK (workspace_id = 'your-workspace-id');
+
+-- Policy 2: Allow select access for anonymous users to query events matching a specific workspace ID
+CREATE POLICY "Allow anon select by workspace" ON usage_events
+    FOR SELECT
+    TO anon
+    USING (workspace_id = 'your-workspace-id');
 ```
+
+> [!WARNING]
+> **Important Note on Workspace RLS Policies**:
+> The static workspace policies above (`workspace_id = 'your-workspace-id'`) are intended only for private, personal, or trusted internal environment syncs where simple segregation is needed. Anyone who inspects the local configuration or queries the public API can easily spoof the `workspace_id`.
+> 
+> For multi-tenant, multi-user, or production team deployments, you should integrate **Supabase Auth** and utilize `auth.uid()` or validated JWT claims (e.g. via custom headers or claims mapping) inside your RLS policies instead of relying on a raw static string check.
 
 > [!NOTE]
 > The table structure matches the local SQLite schema but adds a `device_id` to attribute the source machine, a `workspace_id` to isolate projects, and a `synced_at` timestamp. It does not store raw prompts, assistant messages, tool output, or transcript snippets.
@@ -62,7 +89,6 @@ CREATE INDEX IF NOT EXISTS usage_events_timestamp_idx ON usage_events (event_tim
 ## Config Local Setup
 
 Create or initialize your sync config at `~/.codex-usage-tracker/sync.json`.
-Do not commit this file to Git.
 
 ```bash
 codex-usage-tracker sync init
@@ -70,7 +96,7 @@ codex-usage-tracker sync init
 
 The init wizard will prompt you for:
 1. **Supabase URL**: Your Supabase project REST endpoint (e.g. `https://your-project.supabase.co`)
-2. **Supabase Key**: Your anon or service role key.
+2. **Supabase Key**: Your public **`anon` key**.
 3. **Workspace ID**: A shared identifier if you want to group multiple devices together (optional).
 4. **Auto-sync**: Whether to sync automatically on log refreshes.
 

@@ -70,6 +70,8 @@ def refresh_usage_index(
         parser_diagnostics=diagnostics,
     )
 
+    # TODO: Consider moving this sync orchestration out of the store layer (store.py)
+    # to the CLI/server layer in a future refactor to achieve stricter separation of concerns.
     should_sync = sync
     from codex_usage_tracker.sync_supabase import load_sync_config, sync_run_auto
     sync_config = load_sync_config()
